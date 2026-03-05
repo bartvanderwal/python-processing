@@ -14,7 +14,7 @@ def draw():
 
     x += speed
 
-    request_input("Nieuwe snelheid: ") // blockt niet en wordt niet elke frame uitgevoerd, alleen als er nog geen input gegeven is via input_received()
+    request_input("Nieuwe snelheid: ") # blockt niet en wordt niet elke frame uitgevoerd, alleen als er nog geen input gegeven is via input_received()
 
 def input_received(text_line):
     global speed

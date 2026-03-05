@@ -1,4 +1,5 @@
 import inspect
+import os
 import queue
 import threading
 import pygame
@@ -8,6 +9,7 @@ _width = 800
 _height = 500
 _fps = 60
 _title = "Sketch"
+_window_icon = "icon.png"
 
 _screen = None
 _clock = None
@@ -66,6 +68,17 @@ def frame_rate(fps):
 def title(t):
     global _title
     _title = str(t)
+
+def window_icon(path="icon.png"):
+    """
+    Stel het venster-icoon in. Standaard zoekt dit naar processing/icon.png.
+    """
+    global _window_icon
+    _window_icon = str(path)
+
+    # If the window already exists, apply immediately as well.
+    if _screen is not None:
+        _apply_window_icon()
 
 def background(*args):
     _require_screen("background")
@@ -310,6 +323,29 @@ def _dispatch_input_events(sketch):
         elif kind == "error":
             _invoke_handler(sketch, "input_error", payload)
 
+def _resolve_icon_path(path):
+    if os.path.isabs(path):
+        return path
+
+    # Try caller working directory first, then processing package directory.
+    if os.path.exists(path):
+        return path
+
+    pkg_path = os.path.join(os.path.dirname(__file__), path)
+    if os.path.exists(pkg_path):
+        return pkg_path
+
+    return path
+
+def _apply_window_icon():
+    resolved = _resolve_icon_path(_window_icon)
+    try:
+        icon_surface = pygame.image.load(resolved)
+        pygame.display.set_icon(icon_surface)
+    except Exception:
+        # Keep startup robust if icon path is invalid or image can't be loaded.
+        pass
+
 def _make_sketch_from_caller():
     global _sketch_globals
     caller_globals = inspect.stack()[2].frame.f_globals
@@ -324,6 +360,7 @@ def _init_window():
     _set_public_global("displayWidth", int(info.current_w))
     _set_public_global("displayHeight", int(info.current_h))
     _screen = pygame.display.set_mode((_width, _height))
+    _apply_window_icon()
     pygame.display.set_caption(_title)
     _clock = pygame.time.Clock()
     _set_public_global("width", _width)
