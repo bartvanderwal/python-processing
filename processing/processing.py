@@ -1,3 +1,4 @@
+import builtins
 import inspect
 import os
 import queue
@@ -28,6 +29,10 @@ _sketch_globals = None
 _input_events = queue.Queue()
 _input_lock = threading.Lock()
 _input_pending = False
+_draw_call_depth = 0
+_run_thread = None
+_input_patch_active = False
+_original_input = builtins.input
 
 # Public Processing-like globals
 width = _width
@@ -323,6 +328,28 @@ def _dispatch_input_events(sketch):
         elif kind == "error":
             _invoke_handler(sketch, "input_error", payload)
 
+def _guarded_input(*args, **kwargs):
+    if _draw_call_depth > 0 and threading.current_thread() is _run_thread:
+        raise RuntimeError(
+            "input() is not allowed inside draw() because it blocks rendering. "
+            "Use request_input(prompt) with input_received(text) instead."
+        )
+    return _original_input(*args, **kwargs)
+
+def _patch_input_guard():
+    global _input_patch_active
+    if _input_patch_active:
+        return
+    builtins.input = _guarded_input
+    _input_patch_active = True
+
+def _restore_input_guard():
+    global _input_patch_active
+    if not _input_patch_active:
+        return
+    builtins.input = _original_input
+    _input_patch_active = False
+
 def _resolve_icon_path(path):
     if os.path.isabs(path):
         return path
@@ -400,6 +427,9 @@ def run(mode=None):
     """
     sketch = _make_sketch_from_caller()
     _sync_public_globals_to_sketch()
+    global _run_thread, _draw_call_depth
+    _run_thread = threading.current_thread()
+    _draw_call_depth = 0
 
     has_setup = hasattr(sketch, "setup")
     has_draw = hasattr(sketch, "draw")
@@ -413,6 +443,7 @@ def run(mode=None):
         raise ValueError('mode must be None, "static", or "interactive"')
 
     _init_window()
+    _patch_input_guard()
 
     try:
         if mode == "interactive":
@@ -490,7 +521,11 @@ def run(mode=None):
 
                 _dispatch_input_events(sketch)
                 _set_public_global("frameCount", frameCount + 1)
-                sketch.draw()
+                _draw_call_depth += 1
+                try:
+                    sketch.draw()
+                finally:
+                    _draw_call_depth -= 1
 
                 pygame.display.flip()
                 _clock.tick(_fps)
@@ -518,6 +553,7 @@ def run(mode=None):
                 _clock.tick(30)
 
     finally:
+        _restore_input_guard()
         if mode == "interactive":
             pygame.key.stop_text_input()
         _shutdown()
