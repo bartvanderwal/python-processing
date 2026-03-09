@@ -1,4 +1,6 @@
 from processing import *
+import os
+import tempfile
 
 # State
 frame_count = 0
@@ -13,6 +15,8 @@ is_dragging = False
 console_last = "none"
 console_error = "none"
 asked_count = 0
+image_test_status = "not-run"
+image_test_surface = None
 
 # Visual style state
 fill_on = True
@@ -22,11 +26,28 @@ current_fill = color(80, 170, 255)
 current_stroke = color(20)
 
 
+def _write_test_png(path):
+    # Create a guaranteed-valid PNG through pygame itself.
+    surface = pygame.Surface((1, 1))
+    surface.fill((0, 0, 0))
+    pygame.image.save(surface, path)
+
+
 def setup():
+    global image_test_status, image_test_surface
     size(900, 600)
     frame_rate(60)
     title("processing.py API + Event Handler Test")
     textSize(18)
+
+    # loadImage()/image() test: create a tiny PNG, load it, and validate dimensions.
+    tmp_path = os.path.join(tempfile.gettempdir(), "processing_load_image_test.png")
+    _write_test_png(tmp_path)
+    image_test_surface = loadImage(tmp_path)
+    if image_test_surface.get_size() == (1, 1):
+        image_test_status = "ok"
+    else:
+        image_test_status = "failed-size-" + str(image_test_surface.get_size())
 
 
 def draw():
@@ -107,6 +128,14 @@ def draw():
     text("Input test:", 20, 370)
     text("Press I to request async console input", 20, 395)
     text("Type in terminal and press Enter", 20, 420)
+
+    text("Image test status: " + image_test_status, 20, 445)
+    if image_test_surface is not None:
+        image(image_test_surface, 20, 460, 90, 90)
+        noFill()
+        stroke(20)
+        strokeWeight(1)
+        rect(20, 460, 90, 90)
 
 
 # Keyboard handlers

@@ -210,6 +210,35 @@ def text(txt, x, y):
     surf = _font.render(str(txt), True, _fill_color if _fill_enabled else _stroke_color)
     _screen.blit(surf, _apply_coords((x, y)))
 
+def loadImage(path):
+    resolved = _resolve_icon_path(str(path))
+    return pygame.image.load(resolved)
+
+def image(img, x, y, w=None, h=None):
+    _require_screen("image")
+
+    if isinstance(img, str):
+        img = loadImage(img)
+
+    if not isinstance(img, pygame.Surface):
+        raise TypeError("image() expects a pygame Surface or a path string")
+
+    x, y = _apply_coords((x, y))
+
+    if w is None and h is None:
+        _screen.blit(img, (x, y))
+        return
+
+    if w is None or h is None:
+        raise TypeError("image() requires both w and h when scaling")
+
+    w, h = _apply_coords((w, h))
+    if w <= 0 or h <= 0:
+        raise ValueError("image() width and height must be > 0")
+
+    scaled = pygame.transform.smoothscale(img, (w, h))
+    _screen.blit(scaled, (x, y))
+
 def request_input(prompt="> "):
     """
     Start een asynchrone console input request.
