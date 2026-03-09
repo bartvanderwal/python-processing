@@ -25,6 +25,10 @@ millis_test_status = "not-run"
 nf_test_value = ""
 nf_test_status = "not-run"
 text_align_status = "not-run"
+fullscreen_test_status = "not-run"
+
+# Test fullScreen() before run() initializes the window.
+fullScreen()
 
 # Visual style state
 fill_on = True
@@ -45,11 +49,15 @@ def setup():
     global image_test_status, image_test_surface
     global random_test_status, random_last_value
     global millis_start_value, millis_test_status
-    global nf_test_value, nf_test_status, text_align_status
-    size(900, 600)
+    global nf_test_value, nf_test_status, text_align_status, fullscreen_test_status
     frame_rate(60)
     title("processing.py API + Event Handler Test")
     textSize(18)
+
+    if width == displayWidth and height == displayHeight:
+        fullscreen_test_status = "ok"
+    else:
+        fullscreen_test_status = "failed-size-" + str(width) + "x" + str(height)
 
     # loadImage()/image() test: create a tiny PNG, load it, and validate dimensions.
     tmp_path = os.path.join(tempfile.gettempdir(), "processing_load_image_test.png")
@@ -157,6 +165,7 @@ def draw():
     text("Input test:", 20, 370)
     text("Press I to request async console input", 20, 395)
     text("Type in terminal and press Enter", 20, 420)
+    text("Press ESC to close window (esc handler test)", 20, 545)
 
     text("Image test status: " + image_test_status, 20, 445)
     if image_test_surface is not None:
@@ -176,6 +185,7 @@ def draw():
     text("millis() status: " + millis_test_status + " start=" + str(millis_start_value) + " now=" + str(millis_now_value), 500, 470)
     text("nf() status: " + nf_test_status + " value=" + nf_test_value, 500, 495)
     text("textAlign() status: " + text_align_status, 500, 520)
+    text("fullScreen() status: " + fullscreen_test_status, 500, 545)
 
     # textAlign() visual test: all labels should line up around the anchors.
     textAlign(LEFT, TOP)

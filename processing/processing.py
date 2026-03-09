@@ -13,6 +13,7 @@ _height = 500
 _fps = 60
 _title = "Sketch"
 _window_icon = "icon.png"
+_fullscreen_enabled = False
 
 # Processing-style text alignment constants
 LEFT = 37
@@ -78,6 +79,19 @@ def size(w, h):
     _set_public_global("height", _height)
     _set_public_global("pixelWidth", _width)
     _set_public_global("pixelHeight", _height)
+
+def fullScreen():
+    global _fullscreen_enabled, _width, _height, _screen
+    _fullscreen_enabled = True
+
+    if _screen is not None:
+        info = pygame.display.Info()
+        _width, _height = int(info.current_w), int(info.current_h)
+        _screen = pygame.display.set_mode((_width, _height), pygame.FULLSCREEN)
+        _set_public_global("width", _width)
+        _set_public_global("height", _height)
+        _set_public_global("pixelWidth", _width)
+        _set_public_global("pixelHeight", _height)
 
 def frame_rate(fps):
     global _fps
@@ -500,13 +514,19 @@ def _make_sketch_from_caller():
     return type("Sketch", (object,), caller_globals)
 
 def _init_window():
-    global _screen, _clock, _millis_start
+    global _screen, _clock, _millis_start, _width, _height
     pygame.init()
     pygame.font.init()
     info = pygame.display.Info()
     _set_public_global("displayWidth", int(info.current_w))
     _set_public_global("displayHeight", int(info.current_h))
-    _screen = pygame.display.set_mode((_width, _height))
+
+    flags = 0
+    if _fullscreen_enabled:
+        _width, _height = int(info.current_w), int(info.current_h)
+        flags = pygame.FULLSCREEN
+
+    _screen = pygame.display.set_mode((_width, _height), flags)
     _millis_start = pygame.time.get_ticks()
     _apply_window_icon()
     pygame.display.set_caption(_title)
@@ -600,6 +620,8 @@ def run(mode=None):
                         _set_public_global("keyCode", event.key)
                         _set_public_global("keyPressed", True)
                         _invoke_handler(sketch, "key_pressed", event.key)
+                        if event.key == pygame.K_ESCAPE:
+                            running = False
                     elif event.type == pygame.KEYUP:
                         key_value = event.unicode if getattr(event, "unicode", "") else event.key
                         _set_public_global("key", key_value)
@@ -664,6 +686,8 @@ def run(mode=None):
             while running:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
+                        running = False
+                    elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         running = False
                     elif event.type == getattr(pygame, "WINDOWFOCUSGAINED", -1):
                         _set_public_global("focused", True)
