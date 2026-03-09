@@ -13,6 +13,11 @@ The goal is to let you write simple sketches with minimal setup:
 
 You can use functions like `size()`, `background()`, `circle()`, `text()`, `image()`, and input callbacks.
 
+## Preparation
+
+1. Have Python!
+2. Install Pygame using pip: pip install pygame
+
 ## Create Your First Sketch
 
 Create a file like `my_sketch.py`:
