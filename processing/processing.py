@@ -1,4 +1,3 @@
-import inspect
 import os
 import random as _random_module
 import threading
@@ -13,6 +12,10 @@ from .core.window import resolve_icon_path as _resolve_icon_path_core
 from .core.window import apply_window_icon as _apply_window_icon_core
 from .core.window import init_window as _init_window_core
 from .core.fonts import ensure_font as _ensure_font_core
+from .core.sketch import set_public_global as _set_public_global_core
+from .core.sketch import sync_public_globals_to_sketch as _sync_public_globals_to_sketch_core
+from .core.sketch import make_sketch_from_caller as _make_sketch_from_caller_core
+from .core.guards import require_screen as _require_screen_core
 from .api import drawing as _drawing_api
 from .api import style as _style_api
 from .api import system as _system_api
@@ -192,22 +195,13 @@ def _apply_coords(vals):
     return tuple(int(v) for v in vals)
 
 def _require_screen(func_name: str):
-    if _screen is None:
-        raise RuntimeError(
-            f"{func_name}() called before the window exists. "
-            f"Call run() after your drawing code (or draw inside setup()/draw())."
-        )
+    _require_screen_core(_state(), func_name)
 
 def _set_public_global(name, value):
-    globals()[name] = value
-    if _sketch_globals is not None:
-        _sketch_globals[name] = value
+    _set_public_global_core(_state(), name, value)
 
 def _sync_public_globals_to_sketch():
-    if _sketch_globals is None:
-        return
-    for name in PUBLIC_GLOBAL_NAMES:
-        _sketch_globals[name] = globals()[name]
+    _sync_public_globals_to_sketch_core(_state(), PUBLIC_GLOBAL_NAMES)
 
 def _resolve_icon_path(path):
     return _resolve_icon_path_core(os.path.dirname(__file__), path)
@@ -216,10 +210,8 @@ def _apply_window_icon():
     _apply_window_icon_core(_state(), pygame, os.path.dirname(__file__))
 
 def _make_sketch_from_caller():
-    global _sketch_globals
-    caller_globals = inspect.stack()[2].frame.f_globals
-    _sketch_globals = caller_globals
-    return type("Sketch", (object,), caller_globals)
+    # Stack depth increased after extraction into core helper.
+    return _make_sketch_from_caller_core(_state(), stack_index=3)
 
 def _init_window():
     _init_window_core(_state(), pygame, _set_public_global, _apply_window_icon)
