@@ -1,4 +1,18 @@
-.ven
+# API Reference
+
+This document describes the public API exposed by `from processing import *`.
+
+Notes:
+- This project uses `snake_case` function and variable names.
+- The API is inspired by Processing, with Python naming conventions.
+
+## Structure
+
+### `size(w, h)`
+Set the sketch window size in pixels. The window is resized immediately, even when called from `setup()`. The new surface is initialized with the default background color (light gray, `(200, 200, 200)`).
+
+### `full_screen()`
+Switch the sketch window to fullscreen mode. Must be called before `run()`.
 
 ### `frame_rate(fps)`
 Set the target frame rate for interactive mode.
@@ -26,6 +40,8 @@ Fill the whole screen with a grayscale color.
 
 ### `background(r, g, b)`
 Fill the whole screen with an RGB color.
+
+Note: The window starts with a default light gray background `(200, 200, 200)`, matching Processing's default. Call `background()` in `draw()` to clear the canvas each frame; without it, drawing accumulates across frames.
 
 ### `rect(x, y, w, h)`
 Draw a rectangle.
