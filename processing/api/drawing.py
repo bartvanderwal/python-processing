@@ -134,7 +134,11 @@ def image(state, require_screen, apply_coords, resolve_icon_path, img, x, y, w=N
     if w <= 0 or h <= 0:
         raise ValueError("image() width and height must be > 0")
 
-    scaled = pygame.transform.smoothscale(img, (w, h))
+    img_for_scale = img
+    if img_for_scale.get_bitsize() not in (24, 32):
+        img_for_scale = img_for_scale.convert_alpha()
+
+    scaled = pygame.transform.smoothscale(img_for_scale, (w, h))
     state["_screen"].blit(scaled, (x, y))
 
 

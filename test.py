@@ -17,6 +17,7 @@ console_error = "none"
 asked_count = 0
 image_test_status = "not-run"
 image_test_surface = None
+image_scale_8bit_status = "not-run"
 random_test_status = "not-run"
 random_last_value = 0.0
 millis_start_value = 0
@@ -49,6 +50,7 @@ def _write_test_png(path):
 
 def setup():
     global image_test_status, image_test_surface
+    global image_scale_8bit_status
     global random_test_status, random_last_value
     global millis_start_value, millis_test_status
     global nf_test_value, nf_test_status, text_align_status, fullscreen_test_status, size_test_status, default_bg_test_status
@@ -82,6 +84,13 @@ def setup():
         image_test_status = "ok"
     else:
         image_test_status = "failed-size-" + str(image_test_surface.get_size())
+
+    try:
+        indexed_surface = pygame.Surface((2, 2), depth=8)
+        image(indexed_surface, 2, 2, 20, 20)
+        image_scale_8bit_status = "ok"
+    except (ValueError, TypeError, pygame.error) as exc:
+        image_scale_8bit_status = "failed-" + exc.__class__.__name__
 
     random_last_value = random(10, 20)
     if 10 <= random_last_value < 20:
@@ -183,6 +192,7 @@ def draw():
     text("Press ESC to close window (esc handler test)", 20, 545)
 
     text("Image test status: " + image_test_status, 20, 445)
+    text("image() 8-bit scale: " + image_scale_8bit_status, 20, 570)
     if image_test_surface is not None:
         image(image_test_surface, 20, 460, 90, 90)
         no_fill()
