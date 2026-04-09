@@ -1,6 +1,8 @@
 import atexit
+import inspect
 import os
 import random as _random_module
+import sys
 import threading
 import time
 import pygame
@@ -30,6 +32,9 @@ _title = "Sketch"
 _window_icon = "icon.png"
 _fullscreen_enabled = False
 _run_called = False
+_auto_run_profile_armed = False
+_auto_run_target_code = None
+_auto_run_prev_trace = None
 
 _screen = None
 _clock = None
@@ -84,6 +89,7 @@ def size(w, h):
     _system_api.size(_state(), pygame, _set_public_global, w, h)
     if _screen is None:
         _init_window()
+    _arm_auto_static_run()
 
 def full_screen():
     """Switch the sketch window to fullscreen mode."""
@@ -230,6 +236,7 @@ def _apply_coords(vals):
 def _require_screen(func_name: str):
     if _screen is None:
         _init_window()
+    _arm_auto_static_run()
 
 def _set_public_global(name, value):
     _set_public_global_core(_state(), name, value)
@@ -254,6 +261,58 @@ def _shutdown():
     pygame.quit()
 
 
+def _arm_auto_static_run():
+    global _auto_run_profile_armed, _auto_run_target_code, _auto_run_prev_trace
+
+    if _run_called or _auto_run_profile_armed:
+        return
+
+    frame = inspect.currentframe()
+    target_frame = None
+    while frame is not None:
+        if frame.f_globals.get("__name__") == "__main__":
+            _auto_run_target_code = frame.f_code
+            target_frame = frame
+            break
+        frame = frame.f_back
+
+    if _auto_run_target_code is None:
+        return
+
+    _auto_run_prev_trace = sys.gettrace()
+
+    def _auto_run_trace(frame, event, arg):
+        if _auto_run_prev_trace is not None:
+            _auto_run_prev_trace(frame, event, arg)
+
+        if (
+            _auto_run_profile_armed
+            and not _run_called
+            and event == "return"
+            and frame.f_code is _auto_run_target_code
+        ):
+            _disarm_auto_static_profile()
+            _maybe_auto_run()
+
+        return _auto_run_trace
+
+    _auto_run_profile_armed = True
+    if target_frame is not None:
+        target_frame.f_trace = _auto_run_trace
+    sys.settrace(_auto_run_trace)
+
+
+def _disarm_auto_static_profile():
+    global _auto_run_profile_armed, _auto_run_target_code, _auto_run_prev_trace
+
+    if _auto_run_profile_armed:
+        sys.settrace(_auto_run_prev_trace)
+
+    _auto_run_profile_armed = False
+    _auto_run_target_code = None
+    _auto_run_prev_trace = None
+
+
 # --------------------
 # Modes
 # --------------------
@@ -262,6 +321,7 @@ def run():
     """Start the sketch loop in auto mode (interactive if draw() exists, else static)."""
     global _run_called
     _run_called = True
+    _disarm_auto_static_profile()
     sketch = _make_sketch_from_caller()
     _sync_public_globals_to_sketch()
 
@@ -301,16 +361,33 @@ def run():
 
 
 def _maybe_auto_run():
+    global _screen
     if _screen is None or _run_called:
         return
+
+    _disarm_auto_static_profile()
+
+    # Keep static auto-run responsive in IDEs (e.g. Thonny) by yielding each frame.
+    clock = pygame.time.Clock()
     pygame.display.flip()
     running = True
     while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+        event = pygame.event.wait(33)
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            running = False
+
+        # Drain remaining queued events so window controls stay responsive.
+        for queued in pygame.event.get():
+            if queued.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            elif queued.type == pygame.KEYDOWN and queued.key == pygame.K_ESCAPE:
                 running = False
+
+        clock.tick(30)
+
     pygame.quit()
+    _screen = None
 
 atexit.register(_maybe_auto_run)

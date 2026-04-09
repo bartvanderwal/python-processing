@@ -37,6 +37,7 @@ toplevel_draw_status = "not-run"
 auto_init_status = "not-run"
 default_size_status = "not-run"
 run_signature_status = "not-run"
+auto_profile_hooks_status = "not-run"
 
 # Test full_screen() before run() initializes the window.
 full_screen()
@@ -62,7 +63,7 @@ def setup():
     global random_test_status, random_last_value
     global millis_start_value, millis_test_status
     global nf_test_value, nf_test_status, text_align_status, fullscreen_test_status, size_test_status, default_bg_test_status
-    global pi_constant_test_status, arc_open_mode_status, arc_chord_mode_status, arc_pie_mode_status, toplevel_draw_status, auto_init_status, default_size_status, run_signature_status
+    global pi_constant_test_status, arc_open_mode_status, arc_chord_mode_status, arc_pie_mode_status, toplevel_draw_status, auto_init_status, default_size_status, run_signature_status, auto_profile_hooks_status
     frame_rate(60)
     title("processing.py API + Event Handler Test")
     text_size(18)
@@ -140,6 +141,12 @@ def setup():
         run_signature_status = "ok"
     else:
         run_signature_status = "failed-has-parameters"
+
+    import processing as _processing
+    if hasattr(_processing, "_arm_auto_static_run") and hasattr(_processing, "_disarm_auto_static_profile"):
+        auto_profile_hooks_status = "ok"
+    else:
+        auto_profile_hooks_status = "failed-missing-hooks"
 
     if abs(float(PI) - 3.141592653589793) < 1e-12:
         pi_constant_test_status = "ok"
@@ -265,6 +272,7 @@ def draw():
     text("auto-init status: " + auto_init_status, 500, 745)
     text("default size status: " + default_size_status, 500, 770)
     text("run() signature status: " + run_signature_status, 500, 795)
+    text("auto profile hooks: " + auto_profile_hooks_status, 500, 820)
 
     # text_align() visual test: all labels should line up around the anchors.
     text_align(LEFT, TOP)
