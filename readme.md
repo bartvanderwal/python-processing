@@ -16,8 +16,8 @@ You can use functions like `size()`, `background()`, `circle()`, `text()`, `imag
 ## Preparation
 
 1. Have Python!
-2. Install Pygame using pip: pip install pygame
-3. Copy the folder processing to your program's folder or to /Lib/site-packages
+2. Install Pygame using pip: `pip install pygame`
+3. Copy the folder processing to your program's folder or to `/Lib/site-packages`
 
 ## Create Your First Sketch
 

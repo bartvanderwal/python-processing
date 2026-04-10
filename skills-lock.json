@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "game-artist": {
+      "source": "ikatechis/claude-agentic-mastery",
+      "sourceType": "github",
+      "computedHash": "6a9513fbc554f08a3b29bfb4b02bb53fe5839623e4fc0596d02163bde57913d4"
+    },
+    "pygame-patterns": {
+      "source": "ikatechis/claude-agentic-mastery",
+      "sourceType": "github",
+      "computedHash": "c73713085ff02e596eb48482c41bec22f333e29e734a0309032fe370f9719cc8"
+    },
+    "python-testing": {
+      "source": "ikatechis/claude-agentic-mastery",
+      "sourceType": "github",
+      "computedHash": "4d56f3cbc2f8270fb67c6a858a1e53af238fe224a166421935ba8a1271e9b8cd"
+    }
+  }
+}

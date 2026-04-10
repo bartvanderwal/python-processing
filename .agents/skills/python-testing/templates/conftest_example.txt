@@ -1,0 +1,38 @@
+"""Example fixtures for conftest.py
+
+Add reusable fixtures here instead of duplicating across test files.
+Pytest automatically discovers fixtures in conftest.py.
+"""
+
+import pytest
+
+
+@pytest.fixture
+def example_object():
+    """Example fixture - replace with actual project fixture"""
+    # Setup
+    obj = None  # Create your object
+
+    # Yield for use in tests
+    yield obj
+
+    # Teardown (optional - runs after test completes)
+    # Clean up resources if needed
+
+
+@pytest.fixture
+def mock_external_api(mocker):
+    """Example mock for external dependency"""
+    # Only mock external dependencies (API, DB, file I/O)
+    mock = mocker.Mock()
+    mock.get.return_value = {"status": "success"}
+    return mock
+
+
+@pytest.fixture(scope="module")
+def expensive_setup():
+    """Example of module-scoped fixture (runs once per test module)"""
+    # Use for expensive setup that can be shared across tests
+    resource = None  # Setup expensive resource
+    yield resource
+    # Cleanup

@@ -1,0 +1,43 @@
+"""Tests for {module_name} (src/{module_path})
+
+Generated using python-testing skill.
+Follows project best practices: parametrization, minimal mocking, shared fixtures.
+"""
+
+import pytest
+
+
+class Test{ClassName}:
+    """Test {ClassName} functionality"""
+
+    def test_initialization(self):
+        """Test object is created with correct defaults"""
+        # Arrange
+        obj = {ClassName}()
+
+        # Assert
+        assert obj is not None
+        # Add specific assertions for initialization
+
+    @pytest.mark.parametrize("input,expected", [
+        # Add test cases here
+        # (input1, expected1),
+        # (input2, expected2),
+    ])
+    def test_behavior_with_variations(self, input, expected):
+        """Test behavior with multiple inputs"""
+        # Arrange
+        obj = {ClassName}()
+
+        # Act
+        result = obj.method(input)
+
+        # Assert
+        assert result == expected
+
+    def test_error_handling(self):
+        """Test error conditions"""
+        obj = {ClassName}()
+
+        with pytest.raises(ExpectedException):
+            obj.method_that_fails()
