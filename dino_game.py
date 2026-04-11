@@ -58,6 +58,9 @@ BOSS_REWARD_POINTS = {
     10: 20,
 }
 MAX_PROJECTILES_PER_SIDE = 10
+MENU_MUSIC_PATH = "assets/audio/loading-atmosphere.wav"
+GAME_MUSIC_PATH = "assets/audio/pixel-leap.m4a"
+MUSIC_VOLUME = 0.35
 GROUND_Y = 460
 
 # Collision hitbox tuning (smaller than visual sprite for fair gameplay)
@@ -205,6 +208,8 @@ score = 0
 JUMP_SOUND = None
 CRASH_SOUND = None
 HISS_SOUND = None
+FIRE_PLAYER_SOUND = None
+FIRE_ENEMY_SOUND = None
 isDebugMode = False
 is_ducking = False
 game_paused = False
@@ -238,6 +243,7 @@ boss_completed = {
     7: False,
     10: False,
 }
+current_music_mode = None
 
 
 def reset_game(show_splash=False):
@@ -290,8 +296,37 @@ def reset_game(show_splash=False):
     spawn_obstacle("cactus_low")
 
 
+def update_background_music(force=False):
+    global current_music_mode
+    if not pygame.mixer.get_init():
+        return
+
+    if not shared.music_enabled:
+        if current_music_mode is not None:
+            try:
+                pygame.mixer.music.stop()
+            except Exception:
+                pass
+            current_music_mode = None
+        return
+
+    target_mode = "menu" if (not game_started or shared.show_info) else "game"
+    if not force and target_mode == current_music_mode:
+        return
+
+    target_path = MENU_MUSIC_PATH if target_mode == "menu" else GAME_MUSIC_PATH
+    try:
+        pygame.mixer.music.load(target_path)
+        pygame.mixer.music.set_volume(MUSIC_VOLUME)
+        pygame.mixer.music.play(-1)
+        current_music_mode = target_mode
+    except Exception:
+        # Keep the game running even when a track cannot be loaded.
+        current_music_mode = None
+
+
 def setup():
-    global JUMP_SOUND, CRASH_SOUND, HISS_SOUND
+    global JUMP_SOUND, CRASH_SOUND, HISS_SOUND, FIRE_PLAYER_SOUND, FIRE_ENEMY_SOUND
     size(800, 500)
     frame_rate(60)
     title("Dino Game")
@@ -317,6 +352,18 @@ def setup():
         HISS_SOUND = pygame.mixer.Sound("assets/audio/hiss.wav")
     except Exception:
         HISS_SOUND = None
+
+    try:
+        FIRE_PLAYER_SOUND = pygame.mixer.Sound("assets/audio/fire-player.wav")
+    except Exception:
+        FIRE_PLAYER_SOUND = None
+
+    try:
+        FIRE_ENEMY_SOUND = pygame.mixer.Sound("assets/audio/fire-enemy.wav")
+    except Exception:
+        FIRE_ENEMY_SOUND = None
+
+    update_background_music(force=True)
 
 
 def get_dino_hitbox():
@@ -627,6 +674,8 @@ def fire_player_weapon():
         target_y = boss_state["y"] + (boss_state["h"] * 0.5)
         travel_px = max(80.0, width - (DINO_X + DINO_W))
         projectile["vy"] = (target_y - projectile_y) / (travel_px / max(0.1, profile["speed"]))
+    if FIRE_PLAYER_SOUND is not None:
+        FIRE_PLAYER_SOUND.play()
     player_shot_cooldown_until_ms = now + PLAYER_SHOOT_COOLDOWN_MS
 
 
@@ -882,6 +931,8 @@ def spawn_boss_attack_if_needed(boss):
             "color": (80, 80, 80),
             "enemy": True,
         })
+        if FIRE_ENEMY_SOUND is not None:
+            FIRE_ENEMY_SOUND.play()
         return
 
     if boss["type"] == "cactus_miniboss":
@@ -902,6 +953,8 @@ def spawn_boss_attack_if_needed(boss):
             "color": (40, 130, 40),
             "enemy": True,
         })
+        if FIRE_ENEMY_SOUND is not None:
+            FIRE_ENEMY_SOUND.play()
         return
 
     # final boss shoots same style as player
@@ -922,6 +975,8 @@ def spawn_boss_attack_if_needed(boss):
         "color": color,
         "enemy": True,
     })
+    if FIRE_ENEMY_SOUND is not None:
+        FIRE_ENEMY_SOUND.play()
 
 
 def update_and_draw_boss_mode(theme, update_world=True):
@@ -1222,6 +1277,7 @@ def draw():
     global dino_y, velocity_y, on_ground, obstacle_x, score, game_over, game_started
     global is_ducking, bird_duck_scored, is_fast_falling, snake_hiss_played_for_current
     theme = get_theme()
+    update_background_music()
     background(*theme["bg"])
     fill(*theme["ground_fill"])
     rect(0, GROUND_Y, width, 40)  # ground
@@ -1232,6 +1288,13 @@ def draw():
 
     if shared.show_info:
         shared.draw_info_screen(INFO_TEXT)
+        fill(20)
+        text_size(20)
+        speed_mult = scroll_speed / BASE_SCROLL_SPEED
+        text(f"Current level: {current_level}", 500, 120)
+        text(f"Speed: {speed_mult:.2f}x", 500, 148)
+        text_size(16)
+        text("L: level +1, Shift+L: level -1", 500, 176)
         return
 
     if not game_started:
@@ -1425,10 +1488,17 @@ def key_pressed():
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
     pressed_key = key.lower() if isinstance(key, str) else key
     shared.handle_common_keys(pressed_key, key_code, info_text=INFO_TEXT)
+    if pressed_key in ("i", "s"):
+        update_background_music(force=True)
     if pressed_key in ("i", "q", "s"):
         return
 
     if shared.show_info:
+        if pressed_key == "l":
+            if key == "L":
+                debug_step_level(-1)
+            else:
+                debug_step_level(1)
         return
 
     if key in ("d", "D"):

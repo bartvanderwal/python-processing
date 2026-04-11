@@ -108,3 +108,7 @@ Sprite vliegtuig
   - `assets/cactus-transparant.png`
   - `assets/bird-transparant.png`
   - `assets/snake-transparant.png`
+
+![alt text](assets/explosion.png)
+
+Bron: `https://www.pngarts.com/explore/35406`
