@@ -45,6 +45,7 @@ def load_optional_image(path_candidates):
 
 
 CROWN_BADGE_IMG = load_optional_image((
+    "assets/kroontje.png",
     "assets/crown.png",
     "assets/crown-transparant.png",
     "assets/kroon.png",
