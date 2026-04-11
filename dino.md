@@ -123,14 +123,15 @@ Sprite vliegtuig
 
 ![Plane still](assets/plane-sprite2.png)
 
-- Speler- en obstakelassets staan in `assets/`.
+- Spelerassets staan in `assets/`.
+- Obstakelassets staan in `assets/obstacles/`.
 - Belangrijke sprites:
   - `assets/dino-transparant.png`
   - `assets/cowboy-transparant.png`
   - `assets/roadrunner-transparant.png`
   - `assets/airplane-transparant.png`
-  - `assets/cactus-transparant.png`
-  - `assets/bird-transparant.png`
+  - `assets/obstacles/cactus-transparant.png`
+  - `assets/obstacles/bird-transparant.png`
   - `assets/snake-transparant.png`
 
 ![alt text](assets/explosion.png)

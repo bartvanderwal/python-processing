@@ -13,13 +13,13 @@ DINO_OOPS_IMG = load_image("assets/dino-oops-transparant.png")
 DINO_DUCK_IMG = load_image("assets/dino-duck-transparant.png")
 COWBOY_IMG = load_image("assets/cowboy-transparant.png")
 COWBOY_RUN_IMG = load_image("assets/cowboy-run-transparant.png")
-COWBOY_FALL_IMG = load_image("assets/cowboy-fall-transparant.png")
-COWBOY_DUCK_IMG = load_image("assets/cowboy-duck-transparant.png")
+COWBOY_FALL_IMG = load_image("assets/pc/cowboy-fall-transparant.png")
+COWBOY_DUCK_IMG = load_image("assets/pc/cowboy-duck-transparant.png")
 ROADRUNNER_IMG = load_image("assets/roadrunner-transparant.png")
 ROADRUNNER_OOPS_IMG = load_image("assets/roadrunner-oops-transparant.png")
 ROADRUNNER_DUCK_IMG = load_image("assets/roadrunner-duck-transparant.png")
 AIRPLANE_IMG = load_image("assets/airplane-transparant.png")
-BIRD_IMG = load_image("assets/bird-transparant.png")
+BIRD_IMG = load_image("assets/obstacles/bird-transparant.png")
 SNAKE_IMG = load_image("assets/snake-transparant.png")
 EXPLOSION_IMG = load_image("assets/explosion.png")
 EXPLOSION_FRAMES = [
@@ -27,7 +27,7 @@ EXPLOSION_FRAMES = [
     for idx in range(12)
 ]
 CACTUS_IMGS = [
-    load_image("assets/cactus-transparant.png"),
+    load_image("assets/obstacles/cactus-transparant.png"),
     load_image("assets/obstacles/3Cacti-transparant.png")
 ]
 
