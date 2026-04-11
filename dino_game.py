@@ -1,4 +1,4 @@
-from processing import run, size, frame_rate, title, background, fill, rect, line, arc
+from processing import run, size, full_screen, frame_rate, title, background, fill, rect, line, arc
 from processing import image, text_size, text, load_image, no_fill, stroke, stroke_weight, no_stroke, millis
 from processing import width, height, key, key_code, random
 from processing import PI, TWO_PI
@@ -6,6 +6,7 @@ import pygame
 import shared
 import math
 import os
+import copy
 
 # Dino game assets
 DINO_IMG = load_image("assets/dino-transparant.png")
@@ -34,8 +35,12 @@ CACTUS_IMGS = [
 # Richtingsvarianten (naar rechts kijken) voor specifieke enemies/bosses.
 BIRD_RIGHT_IMG = pygame.transform.flip(BIRD_IMG, True, False)
 GIANT_DINO_RIGHT_IMG = pygame.transform.flip(DINO_IMG, True, False)
+GIANT_COWBOY_RIGHT_IMG = pygame.transform.flip(COWBOY_IMG, True, False)
+GIANT_COWBOY_DUCK_RIGHT_IMG = pygame.transform.flip(COWBOY_DUCK_IMG, True, False)
 
 # Dino properties
+BASE_GAME_WIDTH = 800
+BASE_GAME_HEIGHT = 500
 DINO_X = 100
 DINO_Y = 400
 DINO_W = 60
@@ -45,6 +50,7 @@ GRAVITY = 1.2
 JUMP_VELOCITY = -18
 HIGH_JUMP_VELOCITY = -22
 POWERUP_HIGH_JUMP_VELOCITY = -26
+STACKED_POWER_HIGH_JUMP_VELOCITY = POWERUP_HIGH_JUMP_VELOCITY + (HIGH_JUMP_VELOCITY - JUMP_VELOCITY)
 HIGH_JUMP_POWERUP_MAX_CHARGES = 3
 HIGH_JUMP_WINDOW_MS = 500
 FAST_FALL_EXTRA_GRAVITY = 2.0
@@ -71,6 +77,10 @@ FLIGHT_PIPE_POINTS = 2
 PLAYER_SHOOT_COOLDOWN_MS = 180
 CACTUS_SHOT_VERTICAL_BOOST = 1.45
 CACTUS_SHOT_UPWARD_OFFSET_PX = 12
+GIANT_COWBOY_CROUCH_CHANCE = 0.38
+GIANT_COWBOY_CROUCH_MS = 520
+GIANT_COWBOY_SHOT_STAND_OFFSET = 64
+GIANT_COWBOY_SHOT_CROUCH_OFFSET = 34
 BOSS_INTRO_DURATION_MS = 1700
 BOSS_PLAYER_SPEED = 5.5
 BOSS_LEVEL_ORDER = (4, 7, 10)
@@ -82,6 +92,10 @@ BOSS_REWARD_POINTS = {
 FINAL_BOSS_DEFEAT_DURATION_MS = 2600
 FINAL_BOSS_BLAST_INTERVAL_MS = 110
 FINAL_BOSS_BLAST_LIFE_MS = 620
+BOSS_HIT_EXPLOSION_SIZE = 68
+FINAL_BOSS_DEFEAT_EXPLOSION_SIZE = 128
+FINAL_BOSS_DEFEAT_BURST_COUNT = 7
+MAX_ACTIVE_EXPLOSIONS = 72
 COYOTE_TNT_THROW_SPEED = 6.8
 COYOTE_TNT_THROW_GRAVITY = 0.34
 COYOTE_TNT_BLAST_MS = 260
@@ -94,7 +108,31 @@ MAX_PROJECTILES_PER_SIDE = 10
 COIN_SCORE_VALUE = 1
 MENU_MUSIC_PATH = "assets/audio/loading-atmosphere.wav"
 GAME_MUSIC_PATH = "assets/audio/pixel-leap.wav"
+VICTORY_MUSIC_CANDIDATES = (
+    "assets/audio/victory-music.wav",
+    "assets/audio/victory.wav",
+    "assets/audio/victory.mp3",
+    "assets/audio/victory.m4a",
+)
+CREDITS_MUSIC_CANDIDATES = (
+    "assets/audio/finish-game-music-victory.mp3",
+    "assets/audio/finish-game-music-victory.wav",
+    "assets/audio/finish-game-music-victory.m4a",
+    "assets/audio/victory-music.wav",
+    "assets/audio/victory.wav",
+    "assets/audio/victory.mp3",
+    "assets/audio/victory.m4a",
+)
 MUSIC_VOLUME = 0.35
+INTRO_SPEECH_CANDIDATES = (
+    "assets/audio/welcome-to-the-dino-game.mp3",
+    "assets/audio/intro-speech.mp3",
+    "assets/audio/intro-speech.m4a",
+    "assets/audio/intro-speech.wav",
+)
+CREDITS_DURATION_MS = 60000
+CREDITS_TOP_MARGIN = 30
+CREDITS_BOTTOM_MARGIN = 110
 SCREENSHOT_NOTICE_MS = 2200
 GROUND_Y = 460
 
@@ -220,17 +258,19 @@ OBSTACLE_CONFIG = {
 }
 
 INFO_TEXT = [
-    "i -> instructiescherm",
-    "m -> muziek aan/uit",
-    "s -> sound effects aan/uit",
+    "i -> instructions screen",
+    "m -> music on/off",
+    "s -> sound effects on/off",
+    "f -> fullscreen on/off",
     "q -> in game: menu, in menu: quit prompt",
-    "d -> debug modus (toon hitbox)",
-    "l -> level omhoog (debug mode)",
-    "L -> level omlaag (debug mode)",
-    "p -> pauze",
-    "space/a -> start of schieten (boss)",
-    "k -> screenshot opslaan",
-    "pijltjes -> bewegen / springen / duiken",
+    "d -> debug mode (show hitbox)",
+    "l -> level up (debug mode)",
+    "L -> level down (debug mode)",
+    "v -> start credits (debug mode)",
+    "p -> pause",
+    "space/a -> start or shoot (boss)",
+    "k -> save screenshot",
+    "arrow keys -> move / jump / duck",
 ]
 
 CHARACTER_ORDER = ["dino", "cowboy", "roadrunner"]
@@ -286,8 +326,10 @@ dino_y = DINO_Y
 velocity_y = 0
 on_ground = True
 game_over = False
+game_completed = False
 game_started = False
 score = 0
+high_score = 0
 coin_count = 0
 player_x = float(DINO_X)
 JUMP_SOUND = None
@@ -299,6 +341,9 @@ FIRE_PLAYER_SOUND = None
 FIRE_ENEMY_SOUND = None
 BOSS_EXPLOSION_SOUND = None
 COIN_SOUND = None
+MINI_BOSS_VICTORY_SOUND = None
+INTRO_SPEECH_SOUND = None
+INTRO_SPEECH_CHANNEL = None
 isDebugMode = False
 is_ducking = False
 game_paused = False
@@ -357,10 +402,22 @@ announcement_font_cache = {}
 level_name_announcement_until_ms = 0
 level_name_announcement_text = ""
 wind_swirl_effect_until_ms = 0
+explosion_effects = []
+final_boss_snapshot = None
+final_boss_defeat_until_ms = 0
+final_boss_next_blast_ms = 0
+credits_active = False
+credits_finished = False
+credits_started_ms = 0
+credits_items = []
+credits_content_height = 0
+credits_scroll_speed_px_per_ms = 0.0
+credits_starfield = []
+credits_font_cache = {}
 
 
 def reset_game(show_splash=False):
-    global dino_y, velocity_y, on_ground, score, coin_count, game_over, game_started
+    global dino_y, velocity_y, on_ground, score, coin_count, game_over, game_completed, game_started
     global player_x
     global is_ducking, game_paused, bird_duck_scored, duck_jump_expires_ms, is_fast_falling
     global current_level, scroll_speed, next_level_score, level_blink_until_ms
@@ -381,6 +438,10 @@ def reset_game(show_splash=False):
     global quit_confirm_active
     global level_name_announcement_until_ms, level_name_announcement_text
     global wind_swirl_effect_until_ms
+    global explosion_effects, final_boss_snapshot, final_boss_defeat_until_ms, final_boss_next_blast_ms
+    global credits_active, credits_finished, credits_started_ms
+    global credits_items, credits_content_height, credits_scroll_speed_px_per_ms, credits_starfield
+    stop_intro_speech()
     dino_y = DINO_Y
     velocity_y = 0
     on_ground = True
@@ -388,6 +449,7 @@ def reset_game(show_splash=False):
     score = 0
     coin_count = 0
     game_over = False
+    game_completed = False
     game_started = not show_splash
     is_ducking = False
     game_paused = False
@@ -440,6 +502,17 @@ def reset_game(show_splash=False):
     level_name_announcement_until_ms = 0
     level_name_announcement_text = ""
     wind_swirl_effect_until_ms = 0
+    explosion_effects = []
+    final_boss_snapshot = None
+    final_boss_defeat_until_ms = 0
+    final_boss_next_blast_ms = 0
+    credits_active = False
+    credits_finished = False
+    credits_started_ms = 0
+    credits_items = []
+    credits_content_height = 0
+    credits_scroll_speed_px_per_ms = 0.0
+    credits_starfield = []
     spawn_obstacle("cactus_low")
 
 
@@ -449,7 +522,7 @@ def show_level_name_announcement(level=None):
     level_name = LEVEL_NAMES.get(shown_level)
     if level_name is None:
         return
-    level_name_announcement_text = f"WELCOME IN LEVEL {shown_level}:\n{level_name}"
+    level_name_announcement_text = f"WELCOME TO LEVEL {shown_level}:\n{level_name}"
     level_name_announcement_until_ms = millis() + LEVEL_NAME_NOTICE_MS
 
 
@@ -492,11 +565,25 @@ def update_background_music(force=False):
             current_music_mode = None
         return
 
-    target_mode = "menu" if (not game_started or shared.show_info) else "game"
+    if credits_active:
+        target_mode = "credits"
+    elif game_completed:
+        target_mode = "victory"
+    elif not game_started or shared.show_info:
+        target_mode = "menu"
+    else:
+        target_mode = "game"
     if not force and target_mode == current_music_mode:
         return
 
-    target_path = MENU_MUSIC_PATH if target_mode == "menu" else GAME_MUSIC_PATH
+    if target_mode == "menu":
+        target_path = MENU_MUSIC_PATH
+    elif target_mode == "credits":
+        target_path = next((p for p in CREDITS_MUSIC_CANDIDATES if os.path.exists(p)), GAME_MUSIC_PATH)
+    elif target_mode == "victory":
+        target_path = next((p for p in VICTORY_MUSIC_CANDIDATES if os.path.exists(p)), GAME_MUSIC_PATH)
+    else:
+        target_path = GAME_MUSIC_PATH
     try:
         pygame.mixer.music.load(target_path)
         pygame.mixer.music.set_volume(MUSIC_VOLUME)
@@ -507,11 +594,227 @@ def update_background_music(force=False):
         current_music_mode = None
 
 
+def get_credits_font(size, mono=False, bold=False):
+    key = (int(size), bool(mono), bool(bold))
+    cached = credits_font_cache.get(key)
+    if cached is not None:
+        return cached
+    family = "Courier New" if mono else "Arial Black"
+    font = pygame.font.SysFont(family, int(size), bold=bool(bold))
+    credits_font_cache[key] = font
+    return font
+
+
+def collect_files_with_extensions(root_path, extensions):
+    found = []
+    if not os.path.isdir(root_path):
+        return found
+    valid_ext = tuple(ext.lower() for ext in extensions)
+    for base, _, files in os.walk(root_path):
+        for file_name in sorted(files):
+            lower_name = file_name.lower()
+            if not lower_name.endswith(valid_ext):
+                continue
+            full_path = os.path.join(base, file_name)
+            rel_path = os.path.relpath(full_path, "assets")
+            found.append((full_path, rel_path, file_name))
+    found.sort(key=lambda item: item[1].lower())
+    return found
+
+
+def build_credits_items():
+    items = []
+
+    def add_text(text_value, size, color, mono=False, bold=False, spacing=44):
+        items.append({
+            "kind": "text",
+            "text": str(text_value),
+            "font_size": int(size),
+            "color": color,
+            "mono": bool(mono),
+            "bold": bool(bold),
+            "height": int(spacing),
+        })
+
+    def add_spacer(height_value):
+        items.append({
+            "kind": "spacer",
+            "height": int(height_value),
+        })
+
+    add_text("CONGRATULATIONS!", 58, (255, 70, 70), bold=True, spacing=80)
+    add_text("LEVEL 10 CLEARED", 34, (255, 210, 74), bold=True, spacing=56)
+    add_spacer(12)
+    add_text("Veel dank aan The Boyz J&J, voor het testen en de input.", 27, (247, 232, 132), spacing=46)
+    add_text("Han de Pan voor de visuals en vrolijkheid.", 27, (247, 232, 132), spacing=44)
+    add_text("HAN voor de laptop en gedegen verdieping in Software Engineering", 27, (247, 232, 132), spacing=42)
+    add_text("en leuke Processing game engine; nu ook in Python.", 27, (247, 232, 132), spacing=50)
+    add_spacer(20)
+    add_text("Credits...", 40, (255, 220, 86), bold=True, spacing=62)
+    add_text("Dank aan Codex GPT-5.3", 28, (255, 238, 152), spacing=44)
+    add_text("https://toolkit.artlist.io/ voor de vet overdreven eind music...", 23, (255, 238, 152), spacing=48)
+    add_spacer(18)
+
+    add_text("Enemies & Visual Assets", 36, (255, 220, 86), bold=True, spacing=58)
+    image_sources = []
+    image_sources.extend(collect_files_with_extensions("assets/obstacles", (".png",)))
+    image_sources.extend(collect_files_with_extensions("assets/pc", (".png",)))
+    image_sources.extend(collect_files_with_extensions("assets/npc", (".png",)))
+
+    for full_path, rel_path, file_name in image_sources:
+        try:
+            raw = pygame.image.load(full_path).convert_alpha()
+        except Exception:
+            continue
+        max_w = 250
+        max_h = 150
+        scale = min(max_w / max(1, raw.get_width()), max_h / max(1, raw.get_height()))
+        target_w = max(24, int(raw.get_width() * scale))
+        target_h = max(24, int(raw.get_height() * scale))
+        scaled = pygame.transform.smoothscale(raw, (target_w, target_h))
+        items.append({
+            "kind": "image",
+            "surface": scaled,
+            "caption": file_name,
+            "subcaption": rel_path,
+            "height": target_h + 74,
+        })
+
+    add_spacer(20)
+    add_text("Tunes", 36, (255, 220, 86), bold=True, spacing=58)
+    audio_sources = collect_files_with_extensions(
+        "assets/audio",
+        (".wav", ".mp3", ".m4a", ".ogg", ".flac"),
+    )
+    for _, rel_path, file_name in audio_sources:
+        add_text(file_name, 21, (226, 226, 208), mono=True, spacing=34)
+        add_text(f"assets/{rel_path}", 16, (160, 160, 150), mono=True, spacing=28)
+
+    add_spacer(36)
+    add_text("May your jumps be high and your hitboxes fair.", 24, (255, 233, 154), spacing=42)
+    add_text("THE END", 46, (255, 86, 86), bold=True, spacing=72)
+
+    return items
+
+
+def start_credits_mode():
+    global credits_active, credits_finished, credits_started_ms
+    global credits_items, credits_content_height, credits_scroll_speed_px_per_ms, credits_starfield
+    credits_items = build_credits_items()
+    credits_content_height = sum(item.get("height", 0) for item in credits_items)
+    travel_px = (height + CREDITS_BOTTOM_MARGIN) + (credits_content_height + CREDITS_TOP_MARGIN)
+    credits_scroll_speed_px_per_ms = travel_px / max(1, CREDITS_DURATION_MS)
+    credits_started_ms = millis()
+    credits_active = True
+    credits_finished = False
+    shared.show_info = False
+    stop_intro_speech()
+    credits_starfield = [
+        (
+            random(0, width),
+            random(0, height),
+            random(1, 3),
+            random(0, 1000),
+        )
+        for _ in range(90)
+    ]
+    update_background_music(force=True)
+
+
+def draw_credits_starfield(now_ms):
+    for sx, sy, sz, phase in credits_starfield:
+        twinkle = 90 + int(90 * (0.5 + 0.5 * math.sin((now_ms + phase) / 420.0)))
+        fill(twinkle, twinkle, twinkle)
+        rect(int(sx), int(sy), int(sz), int(sz))
+
+
+def draw_credits_screen():
+    global credits_active, credits_finished
+    now = millis()
+    background(0, 0, 8)
+    draw_credits_starfield(now)
+
+    if not credits_items:
+        fill(255, 220, 80)
+        text_size(26)
+        text("No credits content found.", width // 2 - 138, height // 2)
+        return
+
+    elapsed = max(0, now - credits_started_ms)
+    if elapsed >= CREDITS_DURATION_MS:
+        elapsed = CREDITS_DURATION_MS
+        credits_finished = True
+
+    start_y = height + CREDITS_BOTTOM_MARGIN
+    scroll_offset = start_y - (elapsed * credits_scroll_speed_px_per_ms)
+
+    surface = pygame.display.get_surface()
+    if surface is None:
+        return
+
+    cursor_y = scroll_offset
+    center_x = width // 2
+    for item in credits_items:
+        block_h = item.get("height", 0)
+        draw_y = cursor_y
+        cursor_y += block_h
+
+        if draw_y + block_h < -120 or draw_y > height + 120:
+            continue
+
+        if item["kind"] == "spacer":
+            continue
+
+        if item["kind"] == "text":
+            font = get_credits_font(
+                item.get("font_size", 24),
+                mono=item.get("mono", False),
+                bold=item.get("bold", False),
+            )
+            color = item.get("color", (255, 230, 100))
+            rendered = font.render(item["text"], True, color)
+            perspective_t = max(0.0, min(1.0, (draw_y + block_h) / max(1.0, float(height))))
+            scale = 0.42 + (0.58 * perspective_t)
+            target_w = max(1, int(rendered.get_width() * scale))
+            target_h = max(1, int(rendered.get_height() * scale))
+            sprite = pygame.transform.smoothscale(rendered, (target_w, target_h))
+            surface.blit(sprite, (int(center_x - (target_w / 2)), int(draw_y)))
+            continue
+
+        if item["kind"] == "image":
+            base = item["surface"]
+            perspective_t = max(0.0, min(1.0, (draw_y + block_h) / max(1.0, float(height))))
+            scale = 0.48 + (0.52 * perspective_t)
+            img_w = max(18, int(base.get_width() * scale))
+            img_h = max(18, int(base.get_height() * scale))
+            sprite = pygame.transform.smoothscale(base, (img_w, img_h))
+            img_x = int(center_x - (img_w / 2))
+            surface.blit(sprite, (img_x, int(draw_y)))
+
+            caption_font = get_credits_font(18, mono=True, bold=True)
+            caption = caption_font.render(item.get("caption", ""), True, (255, 231, 138))
+            cx = int(center_x - (caption.get_width() / 2))
+            cy = int(draw_y + img_h + 6)
+            surface.blit(caption, (cx, cy))
+
+            sub_font = get_credits_font(14, mono=True, bold=False)
+            subcaption = sub_font.render(item.get("subcaption", ""), True, (170, 170, 160))
+            sx = int(center_x - (subcaption.get_width() / 2))
+            sy = cy + 18
+            surface.blit(subcaption, (sx, sy))
+
+    fill(255, 220, 84)
+    text_size(20)
+    if credits_finished:
+        text("Credits complete. Press SPACE for menu", width // 2 - 178, height - 28)
+    else:
+        text("Press SPACE to skip credits", width // 2 - 126, height - 28)
+
 def capture_screenshot():
     global screenshot_notice_until_ms, screenshot_notice_text
     surface = pygame.display.get_surface()
     if surface is None:
-        screenshot_notice_text = "Screenshot mislukt (geen actieve surface)"
+        screenshot_notice_text = "Screenshot failed (no active surface)"
         screenshot_notice_until_ms = millis() + SCREENSHOT_NOTICE_MS
         return None
     os.makedirs("assets/screenshots", exist_ok=True)
@@ -521,7 +824,7 @@ def capture_screenshot():
     try:
         pygame.image.save(surface, path)
     except Exception:
-        screenshot_notice_text = "Screenshot mislukt (opslaan)"
+        screenshot_notice_text = "Screenshot failed (save error)"
         screenshot_notice_until_ms = millis() + SCREENSHOT_NOTICE_MS
         return None
     screenshot_notice_text = f"Screenshot: {path}"
@@ -540,6 +843,30 @@ def play_sfx(sound):
         pass
 
 
+def stop_intro_speech():
+    global INTRO_SPEECH_CHANNEL
+    try:
+        if INTRO_SPEECH_CHANNEL is not None:
+            INTRO_SPEECH_CHANNEL.stop()
+    except Exception:
+        pass
+    INTRO_SPEECH_CHANNEL = None
+
+
+def play_intro_speech(force_restart=True):
+    global INTRO_SPEECH_CHANNEL
+    if INTRO_SPEECH_SOUND is None or not shared.sound_enabled:
+        return
+    try:
+        if INTRO_SPEECH_CHANNEL is not None and INTRO_SPEECH_CHANNEL.get_busy():
+            if not force_restart:
+                return
+            INTRO_SPEECH_CHANNEL.stop()
+        INTRO_SPEECH_CHANNEL = INTRO_SPEECH_SOUND.play()
+    except Exception:
+        INTRO_SPEECH_CHANNEL = None
+
+
 def get_jump_sound():
     if (
         get_current_character_key() == "roadrunner"
@@ -552,8 +879,7 @@ def get_jump_sound():
 def setup():
     global JUMP_SOUND, ROADRUNNER_JUMP_SOUND, CRASH_SOUND, HISS_SOUND
     global SPLASH_SOUND, FIRE_PLAYER_SOUND, FIRE_ENEMY_SOUND
-    global BOSS_EXPLOSION_SOUND
-    global COIN_SOUND
+    global BOSS_EXPLOSION_SOUND, COIN_SOUND, MINI_BOSS_VICTORY_SOUND, INTRO_SPEECH_SOUND
     size(800, 500)
     frame_rate(60)
     title("Dino Game")
@@ -609,6 +935,21 @@ def setup():
         COIN_SOUND = pygame.mixer.Sound("assets/audio/ping.wav")
     except Exception:
         COIN_SOUND = None
+
+    try:
+        MINI_BOSS_VICTORY_SOUND = pygame.mixer.Sound("assets/audio/victory.wav")
+    except Exception:
+        MINI_BOSS_VICTORY_SOUND = COIN_SOUND
+
+    INTRO_SPEECH_SOUND = None
+    for speech_path in INTRO_SPEECH_CANDIDATES:
+        if not os.path.exists(speech_path):
+            continue
+        try:
+            INTRO_SPEECH_SOUND = pygame.mixer.Sound(speech_path)
+            break
+        except Exception:
+            INTRO_SPEECH_SOUND = None
 
     update_background_music(force=True)
 
@@ -982,6 +1323,74 @@ def draw_projectile(projectile):
     rect(x, y, w, h)
 
 
+def spawn_explosion_effect(center_x, center_y, size, life_ms=FINAL_BOSS_BLAST_LIFE_MS, alpha=225):
+    if not EXPLOSION_FRAMES:
+        return
+    frame_count = len(EXPLOSION_FRAMES)
+    explosion_effects.append({
+        "x": float(center_x),
+        "y": float(center_y),
+        "size": max(16.0, float(size)),
+        "spawned_ms": millis(),
+        "life_ms": max(120, int(life_ms)),
+        "alpha": max(40, min(255, int(alpha))),
+        "frame_offset": int(random(0, frame_count)),
+    })
+    overflow = len(explosion_effects) - MAX_ACTIVE_EXPLOSIONS
+    if overflow > 0:
+        del explosion_effects[0:overflow]
+
+
+def spawn_final_boss_explosion_burst(boss_snapshot, count=FINAL_BOSS_DEFEAT_BURST_COUNT):
+    if boss_snapshot is None:
+        return
+    min_x = boss_snapshot["x"] - 28
+    max_x = boss_snapshot["x"] + boss_snapshot["w"] + 28
+    min_y = boss_snapshot["y"] - 20
+    max_y = boss_snapshot["y"] + boss_snapshot["h"] + 24
+    for _ in range(max(1, int(count))):
+        px = random(min_x, max_x)
+        py = random(min_y, max_y)
+        size_scale = random(0.72, 1.24)
+        size = FINAL_BOSS_DEFEAT_EXPLOSION_SIZE * size_scale
+        life_ms = FINAL_BOSS_BLAST_LIFE_MS + int(random(-110, 180))
+        spawn_explosion_effect(px, py, size, life_ms=life_ms, alpha=235)
+
+
+def draw_explosion_effects():
+    if not explosion_effects:
+        return
+    surface = pygame.display.get_surface()
+    if surface is None or not EXPLOSION_FRAMES:
+        return
+    frame_count = len(EXPLOSION_FRAMES)
+    now = millis()
+    alive_effects = []
+    for effect in explosion_effects:
+        age = now - effect["spawned_ms"]
+        life_ms = max(1, effect["life_ms"])
+        if age >= life_ms:
+            continue
+
+        progress = max(0.0, min(0.999, age / life_ms))
+        frame_step = int(progress * frame_count)
+        frame_idx = (effect["frame_offset"] + frame_step) % frame_count
+        frame = EXPLOSION_FRAMES[frame_idx]
+        if frame is None:
+            continue
+
+        size_now = int(max(16, effect["size"] * (0.86 + (0.30 * progress))))
+        sprite = pygame.transform.smoothscale(frame, (size_now, size_now)).copy()
+        alpha_now = int(effect["alpha"] * (1.0 - progress))
+        sprite.set_alpha(max(0, min(255, alpha_now)))
+        draw_x = int(effect["x"] - (size_now / 2))
+        draw_y = int(effect["y"] - (size_now / 2))
+        surface.blit(sprite, (draw_x, draw_y))
+        alive_effects.append(effect)
+
+    explosion_effects[:] = alive_effects
+
+
 def fire_player_weapon():
     global player_shot_cooldown_until_ms
     if boss_state is None or game_over or game_paused or shared.show_info:
@@ -1076,7 +1485,7 @@ def spawn_boss_for_level(level):
         return {
             "type": "bird_miniboss",
             "level": 4,
-            "name": "Miniboss L4: Reuzenvogel",
+            "name": "Mini Boss L4: Giant Bird",
             "x": float(width - 220),
             "y": 188.0,
             "w": 200,
@@ -1099,7 +1508,7 @@ def spawn_boss_for_level(level):
         return {
             "type": "cactus_miniboss",
             "level": 7,
-            "name": "Miniboss L7: Reuzencactus",
+            "name": "Mini Boss L7: Giant Cactus",
             "x": float(width - 190),
             "y": 176.0,
             "w": 124,
@@ -1118,22 +1527,34 @@ def spawn_boss_for_level(level):
 
     profile = get_player_weapon_profile()
     form_name = "ReuzenDino"
+    form_display_name = "Giant Dino"
     if active_character_key == "cowboy":
         form_name = "ReuzenCowboy"
+        form_display_name = "Giant Cowboy"
     elif active_character_key == "roadrunner":
         form_name = "ReuzenCoyote"
+        form_display_name = "Giant Coyote"
+    spawn_y = 162.0
+    min_y = 120.0
+    max_y = 220.0
+    if form_name == "ReuzenCowboy":
+        # Keep giant cowboy closer to the ground so straight shots can hit ground-level player.
+        spawn_y = 214.0
+        min_y = 188.0
+        max_y = 252.0
+
     return {
         "type": "final_boss",
         "level": 10,
-        "name": f"Eindbaas L10: {form_name}",
+        "name": f"Final Boss L10: {form_display_name}",
         "form": form_name,
         "x": float(width - 220),
-        "y": 162.0,
+        "y": spawn_y,
         "w": 190,
         "h": 230,
         "vy": 1.35,
-        "min_y": 120.0,
-        "max_y": 220.0,
+        "min_y": min_y,
+        "max_y": max_y,
         "hits_taken": 0,
         "hits_required": 35,
         "meter_steps": 35,
@@ -1146,6 +1567,8 @@ def spawn_boss_for_level(level):
         "max_x": float(width - 68),
         "last_attack_ms": now,
         "enemy_weapon_kind": profile["kind"],
+        "is_crouching": False,
+        "crouch_until_ms": 0,
     }
 
 
@@ -1225,7 +1648,7 @@ def draw_coyote_pits(boss, theme):
 def maybe_start_boss_encounter():
     global boss_state, boss_intro_until_ms, player_shot_cooldown_until_ms
     global pending_weapon_powerup_level
-    if boss_state is not None or game_over or not game_started or game_paused or flight_mode:
+    if boss_state is not None or game_over or game_completed or not game_started or game_paused or flight_mode:
         return
 
     # Skip older boss tiers once the player is already in a higher tier.
@@ -1316,7 +1739,12 @@ def draw_boss_entity(boss):
         image(GIANT_DINO_RIGHT_IMG, x, y, w, h)
         return
     if boss["form"] == "ReuzenCowboy":
-        image(COWBOY_IMG, x, y, w, h)
+        if boss.get("is_crouching", False):
+            crouch_h = int(h * 0.62)
+            crouch_y = y + (h - crouch_h)
+            image(GIANT_COWBOY_DUCK_RIGHT_IMG, x, crouch_y, w, crouch_h)
+        else:
+            image(GIANT_COWBOY_RIGHT_IMG, x, y, w, h)
         return
 
     # ReuzenCoyote without dedicated sprite: stylized silhouette with mood phases.
@@ -1383,10 +1811,13 @@ def draw_boss_meter(boss, theme):
 
 
 def finish_boss_if_defeated(boss):
-    global boss_state, score, weapon_powerup_ready, weapon_powerup_level
+    global boss_state, score, weapon_powerup_ready, weapon_powerup_level, game_completed
     global player_x, boss_left_pressed, boss_right_pressed
+    global final_boss_snapshot, final_boss_defeat_until_ms, final_boss_next_blast_ms
     if boss["hits_taken"] < boss["hits_required"]:
         return
+    if boss["type"] in ("bird_miniboss", "cactus_miniboss"):
+        play_sfx(MINI_BOSS_VICTORY_SOUND)
     boss_completed[boss["level"]] = True
     boss_state = None
     weapon_powerup_ready = False
@@ -1397,6 +1828,18 @@ def finish_boss_if_defeated(boss):
     reset_projectile_pool(player_projectiles)
     score += BOSS_REWARD_POINTS.get(boss["level"], 0)
     update_level_from_score()
+    if boss["level"] >= 10:
+        now = millis()
+        final_boss_snapshot = dict(boss)
+        final_boss_snapshot["enemy_projectiles"] = []
+        final_boss_snapshot["pit_traps"] = []
+        final_boss_defeat_until_ms = now + FINAL_BOSS_DEFEAT_DURATION_MS
+        final_boss_next_blast_ms = now
+        spawn_final_boss_explosion_burst(final_boss_snapshot, count=FINAL_BOSS_DEFEAT_BURST_COUNT + 3)
+        play_sfx(BOSS_EXPLOSION_SOUND)
+        game_completed = True
+        start_credits_mode()
+        return
     spawn_obstacle()
 
 
@@ -1469,6 +1912,16 @@ def update_player_projectiles_against_boss(boss):
             hit = True
 
         if hit:
+            if boss["type"] == "final_boss":
+                impact_x = projectile_rect[0] + (projectile_rect[2] / 2)
+                impact_y = projectile_rect[1] + (projectile_rect[3] / 2)
+                spawn_explosion_effect(
+                    impact_x,
+                    impact_y,
+                    BOSS_HIT_EXPLOSION_SIZE * random(0.78, 1.12),
+                    life_ms=430,
+                    alpha=220,
+                )
             projectile["active"] = False
             continue
         if projectile["x"] > width + 40:
@@ -1543,6 +1996,30 @@ def spawn_boss_attack_if_needed(boss):
         w, h, speed, color = 18, 8, 10.0, (240, 120, 25)
     else:
         w, h, speed, color = 16, 4, 12.0, (25, 25, 25)
+
+    if boss.get("form") == "ReuzenCowboy":
+        crouch_shot = random(0, 1) < GIANT_COWBOY_CROUCH_CHANCE
+        boss["is_crouching"] = crouch_shot
+        if crouch_shot:
+            boss["crouch_until_ms"] = now + GIANT_COWBOY_CROUCH_MS
+            muzzle_y = boss["y"] + boss["h"] - GIANT_COWBOY_SHOT_CROUCH_OFFSET
+        else:
+            boss["crouch_until_ms"] = 0
+            muzzle_y = boss["y"] + boss["h"] - GIANT_COWBOY_SHOT_STAND_OFFSET
+
+        projectile.update({
+            "x": boss["x"] - 14,
+            "y": muzzle_y - (h // 2),
+            "w": w,
+            "h": h,
+            "vx": -speed,
+            "kind": enemy_kind,
+            "color": color,
+            "enemy": True,
+        })
+        play_sfx(FIRE_ENEMY_SOUND)
+        return
+
     projectile.update({
         "x": boss["x"] - 14,
         "y": boss["y"] + (boss["h"] // 2) + int(random(-26, 26)),
@@ -1566,6 +2043,9 @@ def update_and_draw_boss_mode(theme, update_world=True):
         if boss.get("form") == "ReuzenCoyote":
             update_coyote_phase_state(boss)
             update_coyote_pits(boss)
+        if boss.get("form") == "ReuzenCowboy" and boss.get("is_crouching", False):
+            if millis() >= boss.get("crouch_until_ms", 0):
+                boss["is_crouching"] = False
 
         move_dir = int(boss_right_pressed) - int(boss_left_pressed)
         if move_dir != 0:
@@ -1628,11 +2108,12 @@ def update_and_draw_boss_mode(theme, update_world=True):
         draw_projectile(projectile)
     for projectile in iter_active_projectiles(player_projectiles):
         draw_projectile(projectile)
+    draw_explosion_effects()
 
     weapon_label = get_player_weapon_profile()["label"]
     fill(*theme["text"])
     text_size(16)
-    text(f"Wapen: {weapon_label} (SPACE)", 20, 66)
+    text(f"Weapon: {weapon_label} (SPACE)", 20, 66)
 
     if millis() < boss_intro_until_ms:
         if boss["type"] in ("bird_miniboss", "cactus_miniboss"):
@@ -1979,6 +2460,11 @@ def get_start_button_rect():
     return btn_x, btn_y, btn_w, btn_h
 
 
+def get_explain_button_rect():
+    btn_x, btn_y, btn_w, btn_h = get_start_button_rect()
+    return btn_x, btn_y + btn_h + 12, btn_w, btn_h
+
+
 def draw_start_button(theme):
     btn_x, btn_y, btn_w, btn_h = get_start_button_rect()
     fill(255, 255, 255)
@@ -1990,10 +2476,28 @@ def draw_start_button(theme):
     text("Start", btn_x + 40, btn_y + 30)
 
 
+def draw_explain_button(theme):
+    btn_x, btn_y, btn_w, btn_h = get_explain_button_rect()
+    fill(255, 255, 255)
+    no_stroke()
+    rect(btn_x, btn_y, btn_w, btn_h)
+    draw_rounded_rect_outline(btn_x, btn_y, btn_w, btn_h, 12, theme["accent"], 3)
+
+    fill(*theme["accent"])
+    rect(btn_x + 10, btn_y + 10, 24, 24)
+    fill(255, 255, 255)
+    text_size(22)
+    text("i", btn_x + 19, btn_y + 28)
+
+    fill(*theme["accent"])
+    text_size(22)
+    text("Explain", btn_x + 44, btn_y + 29)
+
+
 def draw_character_select(theme):
     text_size(22)
     fill(*theme["text"])
-    text("Kies character: pijl links/rechts", width // 2 - 160, height // 2 + 72)
+    text("Choose character: left/right arrows", width // 2 - 185, height // 2 + 72)
 
     pulse = (math.sin(millis() / 180.0) + 1.0) * 0.5
     pulse_pad = int(5 + pulse * 6)
@@ -2027,16 +2531,25 @@ def draw_character_select(theme):
             )
 
     draw_start_button(theme)
+    draw_explain_button(theme)
 
 
 def draw():
-    global dino_y, velocity_y, on_ground, obstacle_x, score, coin_count, game_over, game_started
+    global dino_y, velocity_y, on_ground, obstacle_x, score, high_score, coin_count, game_over, game_completed, game_started
     global is_ducking, bird_duck_scored, is_fast_falling, snake_hiss_played_for_current
     global high_jump_powerup_charges, high_jump_powerup_warning_until_ms
     global weapon_powerup_warning_until_ms, water_warning_until_ms
     global weapon_powerup_ready, weapon_powerup_level, pending_weapon_powerup_level
+    global final_boss_snapshot, final_boss_defeat_until_ms, final_boss_next_blast_ms
     theme = get_theme()
     update_background_music()
+    if score > high_score:
+        high_score = int(score)
+
+    if credits_active:
+        draw_credits_screen()
+        return
+
     background(*theme["bg"])
     fill(*theme["ground_fill"])
     rect(0, GROUND_Y, width, 40)  # ground
@@ -2065,11 +2578,13 @@ def draw():
         fill(*theme["text"])
         text_size(44)
         text("Dino Game", width // 2 - 105, height // 2 - 55)
+        text_size(26)
+        text(f"Highscore: {high_score}", width // 2 - 92, height // 2 - 90)
         text_size(22)
-        text("Start: SPACE/A of klik Start", width // 2 - 150, height // 2 - 10)
-        text("Spring: pijl omhoog", width // 2 - 110, height // 2 + 20)
-        text("Duik: pijl omlaag (lucht = fast fall)", width // 2 - 188, height // 2 + 50)
-        text("High jump: buk en spring binnen 0.5s", width // 2 - 190, height // 2 + 80)
+        text("Start: SPACE/A or click Start", width // 2 - 165, height // 2 - 10)
+        text("Jump: up arrow", width // 2 - 88, height // 2 + 20)
+        text("Duck: down arrow (air = fast fall)", width // 2 - 190, height // 2 + 50)
+        text("High jump: duck then jump within 0.5s", width // 2 - 220, height // 2 + 80)
         text("Info: I", width // 2 - 45, height // 2 + 110)
         draw_character_select(theme)
         if quit_confirm_active:
@@ -2086,15 +2601,38 @@ def draw():
         draw_debug_overlay()
         return
 
+    if game_completed:
+        draw_main_character()
+        if final_boss_snapshot is not None:
+            draw_boss_entity(final_boss_snapshot)
+            now = millis()
+            if now <= final_boss_defeat_until_ms and now >= final_boss_next_blast_ms:
+                burst_count = int(random(4, 8))
+                spawn_final_boss_explosion_burst(final_boss_snapshot, count=burst_count)
+                final_boss_next_blast_ms = now + FINAL_BOSS_BLAST_INTERVAL_MS
+            if now > final_boss_defeat_until_ms:
+                final_boss_snapshot = None
+        draw_explosion_effects()
+        draw_transparent_blink_text("Congratulations!", 18, base_size=92, base_color=(224, 44, 44))
+        fill(30, 150, 60)
+        text_size(44)
+        text("You Win!", width // 2 - 98, height // 2 - 12)
+        fill(*theme["text"])
+        text_size(22)
+        text("Final boss defeated. Press SPACE for start screen", width // 2 - 230, height // 2 + 26)
+        draw_hud(theme, force_visible=True)
+        draw_debug_overlay()
+        return
+
     if flight_mode:
         update_and_draw_flight_mode(theme, update_world=(not game_paused and not game_over))
         draw_main_character()
         if game_paused and not game_over:
             fill(40)
             text_size(34)
-            text("Pauze", width // 2 - 55, height // 2 - 8)
+            text("Paused", width // 2 - 65, height // 2 - 8)
             text_size(18)
-            text("Druk op P om verder te gaan", width // 2 - 118, height // 2 + 22)
+            text("Press P to continue", width // 2 - 96, height // 2 + 22)
             draw_hud(theme)
             draw_debug_overlay()
             return
@@ -2105,8 +2643,8 @@ def draw():
             draw_hud(theme, force_visible=True)
             fill(*theme["text"])
             text_size(22)
-            text(f"Snelheid: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 230, 72)
-            text("Druk op SPACE voor startscherm", width // 2 - 170, height // 2 + 40)
+            text(f"Speed: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 195, 72)
+            text("Press SPACE for start screen", width // 2 - 165, height // 2 + 40)
             draw_debug_overlay()
             return
         draw_hud(theme)
@@ -2120,9 +2658,9 @@ def draw():
         if game_paused and not game_over:
             fill(40)
             text_size(34)
-            text("Pauze", width // 2 - 55, height // 2 - 8)
+            text("Paused", width // 2 - 65, height // 2 - 8)
             text_size(18)
-            text("Druk op P om verder te gaan", width // 2 - 118, height // 2 + 22)
+            text("Press P to continue", width // 2 - 96, height // 2 + 22)
             draw_hud(theme)
             draw_debug_overlay()
             return
@@ -2133,8 +2671,8 @@ def draw():
             draw_hud(theme, force_visible=True)
             fill(*theme["text"])
             text_size(22)
-            text(f"Snelheid: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 230, 72)
-            text("Druk op SPACE voor startscherm", width // 2 - 170, height // 2 + 40)
+            text(f"Speed: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 195, 72)
+            text("Press SPACE for start screen", width // 2 - 165, height // 2 + 40)
             draw_debug_overlay()
             return
         draw_hud(theme)
@@ -2159,9 +2697,9 @@ def draw():
     if game_paused:
         fill(40)
         text_size(34)
-        text("Pauze", width // 2 - 55, height // 2 - 8)
+        text("Paused", width // 2 - 65, height // 2 - 8)
         text_size(18)
-        text("Druk op P om verder te gaan", width // 2 - 118, height // 2 + 22)
+        text("Press P to continue", width // 2 - 96, height // 2 + 22)
         draw_hud(theme)
         draw_debug_overlay()
         return
@@ -2182,7 +2720,7 @@ def draw():
     elif pending_weapon_powerup_level > 0 and game_started and not game_over:
         fill(*theme["accent"])
         text_size(16)
-        text(f"Pak weapon powerup voor boss L{pending_weapon_powerup_level}", 20, 110)
+        text(f"Collect weapon powerup for boss L{pending_weapon_powerup_level}", 20, 110)
 
     if not game_over:
         # Dino jump physics
@@ -2295,8 +2833,8 @@ def draw():
         draw_hud(theme, force_visible=True)
         fill(*theme["text"])
         text_size(22)
-        text(f"Snelheid: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 230, 72)
-        text("Druk op SPACE voor startscherm", width // 2 - 170, height // 2 + 40)
+        text(f"Speed: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 195, 72)
+        text("Press SPACE for start screen", width // 2 - 165, height // 2 + 40)
         draw_debug_overlay()
         if millis() < screenshot_notice_until_ms:
             fill(30, 110, 30)
@@ -2314,11 +2852,13 @@ def draw():
 def key_pressed():
     global velocity_y, on_ground, game_started, isDebugMode, is_ducking
     global game_paused, selected_character_idx, active_character_key
-    global duck_jump_expires_ms, is_fast_falling, high_jump_powerup_charges
+    global duck_jump_expires_ms, is_fast_falling, high_jump_powerup_charges, game_completed
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
     global boss_left_pressed, boss_right_pressed
     global quit_confirm_active
     pressed_key = key.lower() if isinstance(key, str) else key
+    if credits_active and pressed_key == "i":
+        return
     shared.handle_common_keys(
         pressed_key,
         key_code,
@@ -2327,8 +2867,17 @@ def key_pressed():
         allow_quit=False,
     )
     if pressed_key == "i":
+        if shared.show_info:
+            play_intro_speech(force_restart=True)
+        else:
+            stop_intro_speech()
         update_background_music(force=True)
-    if pressed_key in ("i", "m", "s"):
+        return
+    if pressed_key == "s":
+        if not shared.sound_enabled:
+            stop_intro_speech()
+        return
+    if pressed_key == "m":
         return
 
     if quit_confirm_active:
@@ -2340,7 +2889,10 @@ def key_pressed():
 
     if pressed_key == "q" or key_code == pygame.K_ESCAPE:
         if game_started:
-            save_character_checkpoint()
+            if game_over and not isDebugMode:
+                save_character_checkpoint(level=1)
+            else:
+                save_character_checkpoint()
             if active_character_key in CHARACTER_ORDER:
                 selected_character_idx = CHARACTER_ORDER.index(active_character_key)
             reset_game(show_splash=True)
@@ -2371,11 +2923,26 @@ def key_pressed():
             debug_step_level(1)
         return
 
+    if isDebugMode and pressed_key == "v":
+        game_completed = True
+        start_credits_mode()
+        return
+
     if key in ("p", "P") and game_started and not game_over:
         game_paused = not game_paused
         return
 
     if game_over and key == " ":
+        if isDebugMode:
+            save_character_checkpoint()
+        else:
+            save_character_checkpoint(level=1)
+        if active_character_key in CHARACTER_ORDER:
+            selected_character_idx = CHARACTER_ORDER.index(active_character_key)
+        reset_game(show_splash=True)
+        return
+
+    if game_completed and key == " ":
         save_character_checkpoint()
         if active_character_key in CHARACTER_ORDER:
             selected_character_idx = CHARACTER_ORDER.index(active_character_key)
@@ -2435,11 +3002,12 @@ def key_pressed():
     if game_started and not game_over and key_code == pygame.K_UP and on_ground:
         # Buk-spring binnen half seconde geeft high jump.
         now = millis()
+        used_duck_window = now <= duck_jump_expires_ms
         jump_velocity = JUMP_VELOCITY
         if high_jump_powerup_charges > 0:
-            jump_velocity = POWERUP_HIGH_JUMP_VELOCITY
+            jump_velocity = STACKED_POWER_HIGH_JUMP_VELOCITY if used_duck_window else POWERUP_HIGH_JUMP_VELOCITY
             high_jump_powerup_charges = max(0, high_jump_powerup_charges - 1)
-        elif now <= duck_jump_expires_ms:
+        elif used_duck_window:
             jump_velocity = HIGH_JUMP_VELOCITY
         is_ducking = False
         velocity_y = jump_velocity
@@ -2493,6 +3061,13 @@ def mouse_clicked(x, y, button):
     btn_x, btn_y, btn_w, btn_h = get_start_button_rect()
     if point_in_rect(x, y, btn_x, btn_y, btn_w, btn_h):
         start_game_from_selection()
+        return
+
+    explain_x, explain_y, explain_w, explain_h = get_explain_button_rect()
+    if point_in_rect(x, y, explain_x, explain_y, explain_w, explain_h):
+        shared.show_info = True
+        play_intro_speech(force_restart=True)
+        update_background_music(force=True)
 
 
 def draw_equipped_weapon_on_character(pose):

@@ -42,7 +42,7 @@ def draw_info_screen(info_text):
     background(245)
     fill(18)
     text_size(28)
-    text("Bedieningsgids", 90, 90)
+    text("Controls Guide", 90, 90)
     text_size(18)
     y = 140
     for line in info_text:
@@ -60,9 +60,9 @@ def draw_info_screen(info_text):
         y += 32
     text_size(18)
     fill(30, 30, 30)
-    text(f"Music: {'aan' if music_enabled else 'uit'}", 110, y + 24)
-    text(f"SFX: {'aan' if sound_enabled else 'uit'}", 280, y + 24)
-    text("Druk op i om terug te keren.", 110, y + 56)
+    text(f"Music: {'on' if music_enabled else 'off'}", 110, y + 24)
+    text(f"SFX: {'on' if sound_enabled else 'off'}", 280, y + 24)
+    text("Press i to return.", 110, y + 56)
 
 # --- Speaker icoon tekenen ---
 def draw_speaker_icon(x, y, enabled=True):
