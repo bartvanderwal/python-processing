@@ -41,20 +41,54 @@ Deze game is een variant op de Chrome Dino game, met meerdere speelbare karakter
 - Bij een naderende torencactus verschijnt kort:
   - `Prepare for high jump: duck first then quickly jump.`
 
-## Level 5: vliegtuig en flight mode
+## Levelsysteem
 
-- In level 5 verschijnt een vliegtuig.
-- De speler springt bovenop het vliegtuig om flight mode te starten.
-- Na activatie speelt de game in een extra vliegsegment:
-  - De speler bestuurt het vliegtuig in de linkerhelft van het scherm.
-  - Beweging werkt met pijltjes links/rechts/omhoog/omlaag.
-  - Er verschijnt een extra level met Flappy Bird-achtige pijpen aan boven- en onderkant.
+- De game heeft 10 levels (`MAX_LEVEL = 10`).
+- Elke 10 punten stijgt het level.
+- Bij elke level-up:
+  - De scrollsnelheid stijgt met factor `1.1`.
+  - Score en level-indicator knipperen kort.
+  - De spawnmix verandert, met hogere spawndichtheid en complexere patronen.
 
-## Levelprogressie tot level 10
+### Progressie per fase
 
-- De game heeft 10 levels.
-- In elk nieuw level verschijnt minstens één nieuw vijandtype of een nieuwe variant/aanvalsvorm.
-- Moeilijkheid neemt per level toe via snelheid, spawnmix en patrooncomplexiteit.
+- Level 1:
+  - Basisobstakels (lage/hoge cactus en lage vogel), nog geen slang.
+- Level 2:
+  - Slang komt erbij en klapt dichtbij verder uit.
+- Level 3:
+  - Torencactus komt erbij, met high-jump waarschuwing.
+- Level 4 (miniboss 1):
+  - Reuzenvogel verschijnt.
+  - Boss fight met energiemeter van 20 stappen.
+  - Boss verslaan vereist 15 hits.
+- Level 5:
+  - Vliegtuig verschijnt als pickup.
+  - Bij landing op het vliegtuig start flight mode.
+  - Flight mode: bewegen in linkerhelft, ontwijken van pijpen boven/onder (Flappy Bird-stijl).
+- Level 6:
+  - Verdere verhoging van snelheid, spawnfrequentie en patrooncomplexiteit.
+- Level 7 (miniboss 2):
+  - Reuzencactus verschijnt.
+  - Boss fight met energiemeter van 25 stappen.
+  - 5 takken met elk 5 hits; totaal 25 hits nodig.
+- Levels 8-9:
+  - Verdere opschaling van tempo, variatie en reactiedruk.
+- Level 10 (eindbaas):
+  - Eindbaas is een reuzenvariant per karakter:
+    - Dino: ReuzenDino.
+    - Cowboy: ReuzenCowboy.
+    - Roadrunner: ReuzenCoyote.
+  - Boss gebruikt hetzelfde projectieltype als de speler.
+  - Boss verslaan vereist 35 hits (energiemeter 35 stappen).
+
+### Boss- en wapenregels
+
+- Tijdens boss fights schiet de speler met `SPACE`.
+- Character-specifiek wapen:
+  - Cowboy: `Gun` (zwart).
+  - Roadrunner: `TNT` (rood).
+  - Dino: vuurprojectiel.
 
 ## Assets
 Sprite vliegtuig

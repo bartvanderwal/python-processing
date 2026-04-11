@@ -41,6 +41,7 @@ LEVEL_SCORE_STEP = 10
 LEVEL_SPEED_FACTOR = 1.1
 LEVEL_BLINK_DURATION_MS = 1200
 LEVEL_BLINK_INTERVAL_MS = 120
+MAX_LEVEL = 10
 HIGH_JUMP_WARNING_DURATION_MS = 1800
 AIRPLANE_WARNING_DURATION_MS = 1800
 FLIGHT_PIPE_GAP_H = 150
@@ -48,6 +49,15 @@ FLIGHT_PIPE_WIDTH = 72
 FLIGHT_PIPE_SPAWN_BASE_MS = 1500
 FLIGHT_PLANE_SPEED = 5.0
 FLIGHT_PIPE_POINTS = 2
+PLAYER_SHOOT_COOLDOWN_MS = 180
+BOSS_INTRO_DURATION_MS = 1700
+BOSS_LEVEL_ORDER = (4, 7, 10)
+BOSS_REWARD_POINTS = {
+    4: 8,
+    7: 12,
+    10: 20,
+}
+MAX_PROJECTILES_PER_SIDE = 10
 GROUND_Y = 460
 
 # Collision hitbox tuning (smaller than visual sprite for fair gameplay)
@@ -128,8 +138,11 @@ INFO_TEXT = [
     "Punten: bukken onder lage vogel +3, slang +5",
     "Vanaf level 5: spring op vliegtuig voor flight mode",
     "Flight mode: pijltjes bewegen, ontwijk pijpen",
+    "Boss fights (lvl 4, 7, 10): SPACE = schieten",
+    "Startscherm: klik character of klik Start",
     "P: pauze",
     "D: debug hitboxen",
+    "L (debug): level +1, Shift+L: level -1",
     "I: dit infoscherm",
     "Q of ESC: afsluiten",
 ]
@@ -216,6 +229,15 @@ fly_right_pressed = False
 fly_up_pressed = False
 fly_down_pressed = False
 snake_hiss_played_for_current = False
+player_projectiles = [{"active": False} for _ in range(MAX_PROJECTILES_PER_SIDE)]
+player_shot_cooldown_until_ms = 0
+boss_state = None
+boss_intro_until_ms = 0
+boss_completed = {
+    4: False,
+    7: False,
+    10: False,
+}
 
 
 def reset_game(show_splash=False):
@@ -226,6 +248,8 @@ def reset_game(show_splash=False):
     global flight_mode, flight_plane_x, flight_plane_y, flight_pipe_spawn_due_ms, flight_pipes
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
     global snake_hiss_played_for_current
+    global player_projectiles, player_shot_cooldown_until_ms
+    global boss_state, boss_intro_until_ms, boss_completed
     dino_y = DINO_Y
     velocity_y = 0
     on_ground = True
@@ -254,6 +278,15 @@ def reset_game(show_splash=False):
     fly_up_pressed = False
     fly_down_pressed = False
     snake_hiss_played_for_current = False
+    player_projectiles = [{"active": False} for _ in range(MAX_PROJECTILES_PER_SIDE)]
+    player_shot_cooldown_until_ms = 0
+    boss_state = None
+    boss_intro_until_ms = 0
+    boss_completed = {
+        4: False,
+        7: False,
+        10: False,
+    }
     spawn_obstacle("cactus_low")
 
 
@@ -388,7 +421,7 @@ def start_flight_mode():
     fly_right_pressed = False
     fly_up_pressed = False
     fly_down_pressed = False
-    current_level += 1
+    current_level = min(MAX_LEVEL, current_level + 1)
     scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
     next_level_score = current_level * LEVEL_SCORE_STEP
     level_blink_until_ms = millis() + LEVEL_BLINK_DURATION_MS
@@ -453,13 +486,19 @@ def get_current_character_key():
     return get_selected_character_key()
 
 
+def start_game_from_selection():
+    global active_character_key
+    active_character_key = get_selected_character_key()
+    reset_game(show_splash=False)
+
+
 def get_theme():
     return CHARACTER_CONFIG[get_current_character_key()]["theme"]
 
 
 def update_level_from_score():
     global current_level, scroll_speed, next_level_score, level_blink_until_ms, pending_airplane_spawn
-    new_level = max(1, (score // LEVEL_SCORE_STEP) + 1)
+    new_level = min(MAX_LEVEL, max(1, (score // LEVEL_SCORE_STEP) + 1))
     if new_level > current_level:
         current_level = new_level
         scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
@@ -467,6 +506,502 @@ def update_level_from_score():
         level_blink_until_ms = millis() + LEVEL_BLINK_DURATION_MS
         if current_level >= 5 and not flight_mode:
             pending_airplane_spawn = True
+
+
+def debug_step_level(level_delta):
+    global current_level, score, scroll_speed, next_level_score, level_blink_until_ms, pending_airplane_spawn
+    old_level = current_level
+    target_level = max(1, min(MAX_LEVEL, current_level + level_delta))
+    if target_level == old_level:
+        return
+
+    # In debug mode, level and score move together in fixed 10-point steps.
+    score = max(0, score + (target_level - old_level) * LEVEL_SCORE_STEP)
+    current_level = target_level
+    scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
+    next_level_score = current_level * LEVEL_SCORE_STEP
+    level_blink_until_ms = millis() + LEVEL_BLINK_DURATION_MS
+
+    if old_level < 5 <= current_level and not flight_mode:
+        pending_airplane_spawn = True
+    if current_level < 5:
+        pending_airplane_spawn = False
+
+
+def get_player_weapon_profile():
+    character_key = get_current_character_key()
+    if character_key == "cowboy":
+        return {"kind": "gun", "label": "Gun", "w": 16, "h": 4, "speed": 12.0, "color": (25, 25, 25)}
+    if character_key == "roadrunner":
+        return {"kind": "tnt", "label": "TNT", "w": 12, "h": 12, "speed": 9.0, "color": (210, 35, 30)}
+    return {"kind": "fire", "label": "Fire", "w": 18, "h": 8, "speed": 10.0, "color": (240, 120, 25)}
+
+
+def create_projectile_pool():
+    return [{"active": False} for _ in range(MAX_PROJECTILES_PER_SIDE)]
+
+
+def reset_projectile_pool(pool):
+    for projectile in pool:
+        projectile["active"] = False
+
+
+def acquire_projectile_slot(pool):
+    for projectile in pool:
+        if not projectile.get("active", False):
+            projectile.clear()
+            projectile["active"] = True
+            return projectile
+    return None
+
+
+def iter_active_projectiles(pool):
+    for projectile in pool:
+        if projectile.get("active", False):
+            yield projectile
+
+
+def get_projectile_rect(projectile):
+    return (projectile["x"], projectile["y"], projectile["w"], projectile["h"])
+
+
+def draw_projectile(projectile):
+    x = int(projectile["x"])
+    y = int(projectile["y"])
+    w = int(projectile["w"])
+    h = int(projectile["h"])
+    kind = projectile["kind"]
+
+    if kind == "fire":
+        fill(235, 85, 20)
+        rect(x, y, w, h)
+        fill(250, 200, 70)
+        rect(x + 3, y + 2, max(3, w - 7), max(2, h - 4))
+        return
+
+    if kind == "tnt":
+        fill(205, 30, 30)
+        rect(x, y, w, h)
+        fill(255, 220, 90)
+        rect(x + w - 2, y - 3, 2, 3)
+        return
+
+    if kind == "stem":
+        fill(42, 130, 44)
+        rect(x, y, w, h)
+        fill(28, 98, 30)
+        rect(x + 2, y + 2, max(2, w - 4), max(2, h - 4))
+        return
+
+    # gun / wind / fallback
+    fill(*projectile["color"])
+    rect(x, y, w, h)
+
+
+def fire_player_weapon():
+    global player_shot_cooldown_until_ms
+    if boss_state is None or game_over or game_paused or shared.show_info:
+        return
+    now = millis()
+    if now < player_shot_cooldown_until_ms:
+        return
+    projectile = acquire_projectile_slot(player_projectiles)
+    if projectile is None:
+        return
+    profile = get_player_weapon_profile()
+    dino_draw_y = get_dino_draw_y()
+    dino_h = DUCK_H if (is_ducking and on_ground and not game_over) else DINO_H
+    projectile_y = dino_draw_y + (dino_h // 2) - (profile["h"] // 2)
+    projectile.update({
+        "x": DINO_X + DINO_W - 4,
+        "y": projectile_y,
+        "w": profile["w"],
+        "h": profile["h"],
+        "vx": profile["speed"],
+        "vy": 0.0,
+        "kind": profile["kind"],
+        "color": profile["color"],
+        "enemy": False,
+    })
+    if boss_state is not None:
+        target_y = boss_state["y"] + (boss_state["h"] * 0.5)
+        travel_px = max(80.0, width - (DINO_X + DINO_W))
+        projectile["vy"] = (target_y - projectile_y) / (travel_px / max(0.1, profile["speed"]))
+    player_shot_cooldown_until_ms = now + PLAYER_SHOOT_COOLDOWN_MS
+
+
+def get_boss_hitbox(boss):
+    if boss["type"] == "cactus_miniboss":
+        return (boss["x"] + 10, boss["y"] + 8, boss["w"] - 20, boss["h"] - 8)
+    return (boss["x"] + 10, boss["y"] + 6, boss["w"] - 20, boss["h"] - 12)
+
+
+def get_cactus_branch_rects(boss):
+    branch_rects = []
+    branch_x = boss["x"] - 46
+    base_y = boss["y"] + 22
+    for idx in range(5):
+        branch_y = base_y + idx * 38
+        branch_rects.append((branch_x, branch_y, 46, 14))
+    return branch_rects
+
+
+def spawn_boss_for_level(level):
+    now = millis()
+    if level == 4:
+        return {
+            "type": "bird_miniboss",
+            "level": 4,
+            "name": "Miniboss L4: Reuzenvogel",
+            "x": float(width - 220),
+            "y": 188.0,
+            "w": 200,
+            "h": 120,
+            "vx": -2.2,
+            "vy": 1.6,
+            "min_x": float(width - 320),
+            "max_x": float(width - 70),
+            "min_y": 118.0,
+            "max_y": 300.0,
+            "hits_taken": 0,
+            "hits_required": 15,
+            "meter_steps": 20,
+            "enemy_projectiles": create_projectile_pool(),
+            "attack_interval_ms": 1120,
+            "last_attack_ms": now,
+        }
+
+    if level == 7:
+        return {
+            "type": "cactus_miniboss",
+            "level": 7,
+            "name": "Miniboss L7: Reuzencactus",
+            "x": float(width - 190),
+            "y": 176.0,
+            "w": 124,
+            "h": 242,
+            "vy": 1.2,
+            "min_y": 150.0,
+            "max_y": 210.0,
+            "branch_hp": [5, 5, 5, 5, 5],
+            "hits_taken": 0,
+            "hits_required": 25,
+            "meter_steps": 25,
+            "enemy_projectiles": create_projectile_pool(),
+            "attack_interval_ms": 860,
+            "last_attack_ms": now,
+        }
+
+    profile = get_player_weapon_profile()
+    form_name = "ReuzenDino"
+    if active_character_key == "cowboy":
+        form_name = "ReuzenCowboy"
+    elif active_character_key == "roadrunner":
+        form_name = "ReuzenCoyote"
+    return {
+        "type": "final_boss",
+        "level": 10,
+        "name": f"Eindbaas L10: {form_name}",
+        "form": form_name,
+        "x": float(width - 220),
+        "y": 162.0,
+        "w": 190,
+        "h": 230,
+        "vy": 1.35,
+        "min_y": 120.0,
+        "max_y": 220.0,
+        "hits_taken": 0,
+        "hits_required": 35,
+        "meter_steps": 35,
+        "enemy_projectiles": create_projectile_pool(),
+        "attack_interval_ms": 760,
+        "last_attack_ms": now,
+        "enemy_weapon_kind": profile["kind"],
+    }
+
+
+def maybe_start_boss_encounter():
+    global boss_state, boss_intro_until_ms, player_shot_cooldown_until_ms
+    if boss_state is not None or game_over or not game_started or game_paused or flight_mode:
+        return
+    for level in BOSS_LEVEL_ORDER:
+        if current_level >= level and not boss_completed[level]:
+            boss_state = spawn_boss_for_level(level)
+            boss_intro_until_ms = millis() + BOSS_INTRO_DURATION_MS
+            reset_projectile_pool(player_projectiles)
+            player_shot_cooldown_until_ms = 0
+            break
+
+
+def draw_boss_entity(boss):
+    x = int(boss["x"])
+    y = int(boss["y"])
+    w = int(boss["w"])
+    h = int(boss["h"])
+
+    if boss["type"] == "bird_miniboss":
+        image(BIRD_IMG, x, y, w, h)
+        return
+
+    if boss["type"] == "cactus_miniboss":
+        fill(46, 145, 54)
+        rect(x, y, w, h)
+        fill(61, 172, 71)
+        rect(x + 20, y + 10, w - 40, h - 24)
+        branch_rects = get_cactus_branch_rects(boss)
+        for idx, branch_hp in enumerate(boss["branch_hp"]):
+            if branch_hp <= 0:
+                continue
+            bx, by, bw, bh = branch_rects[idx]
+            fill(48, 138, 53)
+            rect(int(bx), int(by), int(bw), int(bh))
+        return
+
+    # Final boss
+    if boss["form"] == "ReuzenDino":
+        image(DINO_IMG, x, y, w, h)
+        return
+    if boss["form"] == "ReuzenCowboy":
+        image(COWBOY_IMG, x, y, w, h)
+        return
+
+    # ReuzenCoyote without dedicated sprite: stylized silhouette.
+    fill(124, 84, 51)
+    rect(x + 24, y + 78, w - 54, h - 120)
+    rect(x + 8, y + 92, 30, h - 112)
+    rect(x + w - 50, y + 62, 42, 58)
+    fill(94, 60, 34)
+    rect(x + w - 44, y + 54, 12, 14)
+    rect(x + w - 26, y + 54, 12, 14)
+    fill(12, 12, 12)
+    rect(x + w - 34, y + 84, 6, 6)
+
+
+def draw_boss_meter(boss, theme):
+    bar_x = width // 2 - 190
+    bar_y = 74
+    bar_w = 380
+    bar_h = 18
+    fill(45, 45, 45)
+    rect(bar_x, bar_y, bar_w, bar_h)
+
+    steps = boss["meter_steps"]
+    hits_required = boss["hits_required"]
+    hits_taken = boss["hits_taken"]
+    remaining_ratio = max(0.0, (hits_required - hits_taken) / max(1, hits_required))
+    filled_steps = int(round(steps * remaining_ratio))
+    step_w = (bar_w - 4) / max(1, steps)
+
+    fill(214, 66, 66)
+    for idx in range(filled_steps):
+        px = int(bar_x + 2 + idx * step_w)
+        rect(px, bar_y + 2, max(2, int(step_w - 1)), bar_h - 4)
+
+    fill(*theme["text"])
+    text_size(18)
+    text(boss["name"], width // 2 - 186, 66)
+    text_size(15)
+    text(f"Hits: {hits_taken}/{hits_required}", width // 2 + 106, 66)
+
+
+def finish_boss_if_defeated(boss):
+    global boss_state, score
+    if boss["hits_taken"] < boss["hits_required"]:
+        return
+    boss_completed[boss["level"]] = True
+    boss_state = None
+    reset_projectile_pool(player_projectiles)
+    score += BOSS_REWARD_POINTS.get(boss["level"], 0)
+    update_level_from_score()
+    spawn_obstacle()
+
+
+def update_enemy_projectiles(boss):
+    global game_over
+    player_hitbox = get_dino_hitbox()
+    for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
+        projectile["x"] += projectile["vx"]
+        projectile_rect = get_projectile_rect(projectile)
+        if rects_overlap(projectile_rect, player_hitbox):
+            projectile["active"] = False
+            game_over = True
+            if CRASH_SOUND is not None:
+                CRASH_SOUND.play()
+            return
+        if projectile["x"] + projectile["w"] < -40:
+            projectile["active"] = False
+
+
+def update_player_projectiles_against_boss(boss):
+    boss_hitbox = get_boss_hitbox(boss)
+    branch_rects = get_cactus_branch_rects(boss) if boss["type"] == "cactus_miniboss" else []
+    for projectile in iter_active_projectiles(player_projectiles):
+        projectile["x"] += projectile["vx"]
+        projectile["y"] += projectile.get("vy", 0.0)
+        projectile_rect = get_projectile_rect(projectile)
+        hit = False
+
+        if boss["type"] == "cactus_miniboss":
+            for idx, branch_rect in enumerate(branch_rects):
+                if boss["branch_hp"][idx] <= 0:
+                    continue
+                if rects_overlap(projectile_rect, branch_rect):
+                    boss["branch_hp"][idx] -= 1
+                    boss["hits_taken"] += 1
+                    hit = True
+                    break
+        elif rects_overlap(projectile_rect, boss_hitbox):
+            boss["hits_taken"] += 1
+            hit = True
+
+        if hit:
+            projectile["active"] = False
+            continue
+        if projectile["x"] > width + 40:
+            projectile["active"] = False
+
+
+def spawn_boss_attack_if_needed(boss):
+    now = millis()
+    if now - boss["last_attack_ms"] < boss["attack_interval_ms"]:
+        return
+    boss["last_attack_ms"] = now
+
+    projectile = acquire_projectile_slot(boss["enemy_projectiles"])
+    if projectile is None:
+        return
+
+    if boss["type"] == "bird_miniboss":
+        projectile.update({
+            "x": boss["x"] - 26,
+            "y": DINO_Y + 14 + int(random(-5, 6)),
+            "w": 30,
+            "h": 14,
+            "vx": -10.0,
+            "kind": "wind",
+            "color": (80, 80, 80),
+            "enemy": True,
+        })
+        return
+
+    if boss["type"] == "cactus_miniboss":
+        branch_rects = get_cactus_branch_rects(boss)
+        living_idxs = [idx for idx, hp in enumerate(boss["branch_hp"]) if hp > 0]
+        if not living_idxs:
+            projectile["active"] = False
+            return
+        pick = living_idxs[int(random(0, len(living_idxs)))]
+        bx, by, bw, bh = branch_rects[pick]
+        projectile.update({
+            "x": bx - 10,
+            "y": by + (bh // 2) - 4,
+            "w": 22,
+            "h": 8,
+            "vx": -8.8,
+            "kind": "stem",
+            "color": (40, 130, 40),
+            "enemy": True,
+        })
+        return
+
+    # final boss shoots same style as player
+    enemy_kind = boss["enemy_weapon_kind"]
+    if enemy_kind == "tnt":
+        w, h, speed, color = 12, 12, 9.0, (210, 35, 30)
+    elif enemy_kind == "fire":
+        w, h, speed, color = 18, 8, 10.0, (240, 120, 25)
+    else:
+        w, h, speed, color = 16, 4, 12.0, (25, 25, 25)
+    projectile.update({
+        "x": boss["x"] - 14,
+        "y": boss["y"] + (boss["h"] // 2) + int(random(-26, 26)),
+        "w": w,
+        "h": h,
+        "vx": -speed,
+        "kind": enemy_kind,
+        "color": color,
+        "enemy": True,
+    })
+
+
+def update_and_draw_boss_mode(theme, update_world=True):
+    global dino_y, velocity_y, on_ground, is_fast_falling, game_over
+    boss = boss_state
+    if boss is None:
+        return
+
+    if update_world:
+        # Player jump physics stays active during boss fights.
+        if not on_ground:
+            gravity_now = GRAVITY + (FAST_FALL_EXTRA_GRAVITY if is_fast_falling else 0)
+            velocity_y += gravity_now
+            dino_y += velocity_y
+            if dino_y >= DINO_Y:
+                dino_y = DINO_Y
+                velocity_y = 0
+                on_ground = True
+                is_fast_falling = False
+
+        if boss["type"] == "bird_miniboss":
+            boss["x"] += boss["vx"]
+            boss["y"] += boss["vy"]
+            if boss["x"] <= boss["min_x"] or boss["x"] >= boss["max_x"]:
+                boss["vx"] *= -1
+            if boss["y"] <= boss["min_y"] or boss["y"] >= boss["max_y"]:
+                boss["vy"] *= -1
+        else:
+            boss["y"] += boss["vy"]
+            if boss["y"] <= boss["min_y"] or boss["y"] >= boss["max_y"]:
+                boss["vy"] *= -1
+
+        spawn_boss_attack_if_needed(boss)
+        update_enemy_projectiles(boss)
+        if game_over:
+            return
+
+        update_player_projectiles_against_boss(boss)
+        finish_boss_if_defeated(boss)
+        if boss_state is None:
+            return
+
+        if rects_overlap(get_dino_hitbox(), get_boss_hitbox(boss)):
+            game_over = True
+            if CRASH_SOUND is not None:
+                CRASH_SOUND.play()
+            return
+
+    draw_boss_entity(boss)
+    draw_boss_meter(boss, theme)
+
+    for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
+        draw_projectile(projectile)
+    for projectile in iter_active_projectiles(player_projectiles):
+        draw_projectile(projectile)
+
+    weapon_label = get_player_weapon_profile()["label"]
+    fill(*theme["text"])
+    text_size(16)
+    text(f"Wapen: {weapon_label} (SPACE)", 20, 66)
+
+    if millis() < boss_intro_until_ms:
+        fill(*theme["accent"])
+        text_size(24)
+        text(boss["name"], width // 2 - 150, 112)
+
+    if isDebugMode:
+        no_fill()
+        stroke(255, 0, 0)
+        stroke_weight(2)
+        rect(*get_boss_hitbox(boss))
+        for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
+            rect(*get_projectile_rect(projectile))
+        for projectile in iter_active_projectiles(player_projectiles):
+            rect(*get_projectile_rect(projectile))
+        if boss["type"] == "cactus_miniboss":
+            for idx, branch_rect in enumerate(get_cactus_branch_rects(boss)):
+                if boss["branch_hp"][idx] > 0:
+                    rect(*branch_rect)
+        no_stroke()
 
 
 def is_level_blink_active():
@@ -492,6 +1027,18 @@ def draw_hud(theme, force_visible=False):
         fill(*theme["accent"])
         text_size(20)
         text(f"Level Up! x{LEVEL_SPEED_FACTOR}", width // 2 - 90, 40)
+
+
+def draw_debug_overlay():
+    if not isDebugMode:
+        return
+    fill(180, 20, 20)
+    text_size(18)
+    text("DEBUG MODE", width - 140, 24)
+    text_size(14)
+    speed_mult = scroll_speed / BASE_SCROLL_SPEED
+    text(f"Speed: {speed_mult:.2f}x", width - 140, 44)
+    text(f"Level: {current_level}", width - 140, 62)
 
 
 def draw_flight_pipes():
@@ -596,24 +1143,54 @@ def draw_rounded_rect_outline(x, y, w, h, radius, col, weight=2):
     no_stroke()
 
 
-def draw_character_select(theme):
-    text_size(22)
-    fill(*theme["text"])
-    text("Kies character: pijl links/rechts", width // 2 - 160, height // 2 + 72)
+def point_in_rect(px, py, x, y, w, h):
+    return x <= px <= x + w and y <= py <= y + h
 
+
+def get_character_select_layout():
     card_w = 170
     card_h = 165
     gap = 26
     start_x = (width - (card_w * 3 + gap * 2)) // 2
     card_y = height // 2 + 92
+    cards = []
+    for idx in range(len(CHARACTER_ORDER)):
+        x = start_x + idx * (card_w + gap)
+        cards.append((idx, x, card_y, card_w, card_h))
+    return cards
+
+
+def get_start_button_rect():
+    btn_w = 150
+    btn_h = 44
+    btn_x = width - btn_w - 36
+    btn_y = height // 2 - 10
+    return btn_x, btn_y, btn_w, btn_h
+
+
+def draw_start_button(theme):
+    btn_x, btn_y, btn_w, btn_h = get_start_button_rect()
+    fill(255, 255, 255)
+    no_stroke()
+    rect(btn_x, btn_y, btn_w, btn_h)
+    draw_rounded_rect_outline(btn_x, btn_y, btn_w, btn_h, 12, theme["accent"], 3)
+    fill(*theme["accent"])
+    text_size(24)
+    text("Start", btn_x + 40, btn_y + 30)
+
+
+def draw_character_select(theme):
+    text_size(22)
+    fill(*theme["text"])
+    text("Kies character: pijl links/rechts", width // 2 - 160, height // 2 + 72)
 
     pulse = (math.sin(millis() / 180.0) + 1.0) * 0.5
     pulse_pad = int(5 + pulse * 6)
     pulse_weight = int(2 + pulse * 2)
 
-    for idx, character_key in enumerate(CHARACTER_ORDER):
+    for idx, x, card_y, card_w, card_h in get_character_select_layout():
+        character_key = CHARACTER_ORDER[idx]
         character = CHARACTER_CONFIG[character_key]
-        x = start_x + idx * (card_w + gap)
 
         fill(255, 255, 255)
         no_stroke()
@@ -638,6 +1215,8 @@ def draw_character_select(theme):
                 pulse_weight,
             )
 
+    draw_start_button(theme)
+
 
 def draw():
     global dino_y, velocity_y, on_ground, obstacle_x, score, game_over, game_started
@@ -661,12 +1240,13 @@ def draw():
         text_size(44)
         text("Dino Game", width // 2 - 105, height // 2 - 55)
         text_size(22)
-        text("Start: SPACE of A", width // 2 - 95, height // 2 - 10)
+        text("Start: SPACE/A of klik Start", width // 2 - 150, height // 2 - 10)
         text("Spring: pijl omhoog", width // 2 - 110, height // 2 + 20)
         text("Duik: pijl omlaag (lucht = fast fall)", width // 2 - 188, height // 2 + 50)
         text("High jump: buk en spring binnen 0.5s", width // 2 - 190, height // 2 + 80)
         text("Info: I", width // 2 - 45, height // 2 + 110)
         draw_character_select(theme)
+        draw_debug_overlay()
         return
 
     if flight_mode:
@@ -679,6 +1259,7 @@ def draw():
             text_size(18)
             text("Druk op P om verder te gaan", width // 2 - 118, height // 2 + 22)
             draw_hud(theme)
+            draw_debug_overlay()
             return
         if game_over:
             fill(255, 0, 0)
@@ -689,8 +1270,38 @@ def draw():
             text_size(22)
             text(f"Snelheid: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 230, 72)
             text("Druk op SPACE voor startscherm", width // 2 - 170, height // 2 + 40)
+            draw_debug_overlay()
             return
         draw_hud(theme)
+        draw_debug_overlay()
+        return
+
+    maybe_start_boss_encounter()
+    if boss_state is not None:
+        update_and_draw_boss_mode(theme, update_world=(not game_paused and not game_over))
+        draw_dino()
+        if game_paused and not game_over:
+            fill(40)
+            text_size(34)
+            text("Pauze", width // 2 - 55, height // 2 - 8)
+            text_size(18)
+            text("Druk op P om verder te gaan", width // 2 - 118, height // 2 + 22)
+            draw_hud(theme)
+            draw_debug_overlay()
+            return
+        if game_over:
+            fill(255, 0, 0)
+            text_size(40)
+            text("Game Over!", width // 2 - 120, height // 2)
+            draw_hud(theme, force_visible=True)
+            fill(*theme["text"])
+            text_size(22)
+            text(f"Snelheid: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 230, 72)
+            text("Druk op SPACE voor startscherm", width // 2 - 170, height // 2 + 40)
+            draw_debug_overlay()
+            return
+        draw_hud(theme)
+        draw_debug_overlay()
         return
 
     # Draw obstacle
@@ -706,6 +1317,7 @@ def draw():
         text_size(18)
         text("Druk op P om verder te gaan", width // 2 - 118, height // 2 + 22)
         draw_hud(theme)
+        draw_debug_overlay()
         return
 
     if millis() < high_jump_warning_until_ms and game_started and not game_over:
@@ -800,9 +1412,11 @@ def draw():
         text_size(22)
         text(f"Snelheid: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 230, 72)
         text("Druk op SPACE voor startscherm", width // 2 - 170, height // 2 + 40)
+        draw_debug_overlay()
         return
 
     draw_hud(theme)
+    draw_debug_overlay()
 
 def key_pressed():
     global velocity_y, on_ground, game_started, isDebugMode, is_ducking
@@ -819,6 +1433,13 @@ def key_pressed():
 
     if key in ("d", "D"):
         isDebugMode = not isDebugMode
+        return
+
+    if isDebugMode and game_started and not game_over and pressed_key == "l":
+        if key == "L":
+            debug_step_level(-1)
+        else:
+            debug_step_level(1)
         return
 
     if key in ("p", "P") and game_started and not game_over:
@@ -840,11 +1461,14 @@ def key_pressed():
         return
 
     if not game_started and key in (" ", "a", "A"):
-        active_character_key = get_selected_character_key()
-        reset_game(show_splash=False)
+        start_game_from_selection()
         return
 
     if game_paused:
+        return
+
+    if game_started and not game_over and key == " " and boss_state is not None:
+        fire_player_weapon()
         return
 
     if game_started and flight_mode and not game_over:
@@ -904,6 +1528,25 @@ def key_released(released_key):
         is_fast_falling = False
 
 
+def mouse_clicked(x, y, button):
+    global selected_character_idx
+    if button != 1:
+        return
+    if shared.show_info:
+        return
+    if game_started:
+        return
+
+    for idx, card_x, card_y, card_w, card_h in get_character_select_layout():
+        if point_in_rect(x, y, card_x, card_y, card_w, card_h):
+            selected_character_idx = idx
+            return
+
+    btn_x, btn_y, btn_w, btn_h = get_start_button_rect()
+    if point_in_rect(x, y, btn_x, btn_y, btn_w, btn_h):
+        start_game_from_selection()
+
+
 def draw_dino():
     if flight_mode:
         plane_x, plane_y, plane_w, plane_h = get_flight_plane_rect()
@@ -951,4 +1594,11 @@ def draw_dino():
         rect(*get_dino_hitbox())
         no_stroke()
 
-run()
+if __name__ == "__main__":
+    try:
+        run()
+    except KeyboardInterrupt:
+        try:
+            pygame.quit()
+        except Exception:
+            pass
