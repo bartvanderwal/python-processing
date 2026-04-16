@@ -51,6 +51,34 @@ CROWN_BADGE_IMG = load_optional_image((
     "assets/kroon.png",
     "assets/pc/crown.png",
 ))
+BADGER_SHOP_IMG = load_optional_image((
+    "assets/badger-shop.png",
+    "assets/badger_shop.png",
+    "assets/npc/badger-shop.png",
+    "assets/npc/badger_shop.png",
+))
+SHOP_ITEM_ICONS = {
+    "extra_life": load_optional_image((
+        "assets/shop-heart.png",
+        "assets/heart.png",
+        "assets/shop/heart.png",
+    )),
+    "shield": load_optional_image((
+        "assets/shop-shield.png",
+        "assets/shield.png",
+        "assets/shop/shield.png",
+    )),
+    "coin_boost": load_optional_image((
+        "assets/shop-coin-boost.png",
+        "assets/coin-boost.png",
+        "assets/shop/coin-boost.png",
+    )),
+    "jump_shoes": load_optional_image((
+        "assets/shop-jump-shoes.png",
+        "assets/jump-shoes.png",
+        "assets/shop/jump-shoes.png",
+    )),
+}
 
 
 def extract_plane_sprite_rows(sheet, cols=3, rows=3):
@@ -155,11 +183,6 @@ GIANT_COWBOY_SHOT_CROUCH_OFFSET = 34
 BOSS_INTRO_DURATION_MS = 1700
 BOSS_PLAYER_SPEED = 5.5
 BOSS_LEVEL_ORDER = (4, 7, 10)
-BOSS_REWARD_POINTS = {
-    4: 8,
-    7: 12,
-    10: 20,
-}
 FINAL_BOSS_JUMP_GRAVITY = 0.78
 FINAL_BOSS_JUMP_VELOCITY_MIN = -13.8
 FINAL_BOSS_JUMP_VELOCITY_MAX = -10.6
@@ -181,6 +204,8 @@ FINAL_BOSS_DEFEAT_BURST_COUNT = 7
 MAX_ACTIVE_EXPLOSIONS = 72
 CACTUS_BRANCH_EXPLOSION_SIZE = 54
 CACTUS_BRANCH_EXPLOSION_LIFE_MS = 360
+BIRD_MINIBOSS_HITS_REQUIRED = 15
+CACTUS_MINIBOSS_HITS_REQUIRED = 15
 COYOTE_TNT_THROW_SPEED = 6.8
 COYOTE_TNT_THROW_GRAVITY = 0.34
 COYOTE_TNT_BLAST_MS = 260
@@ -192,6 +217,14 @@ COYOTE_BIG_BOMB_RETURN_SPEED = 9.4
 COYOTE_BIG_BOMB_RETURN_VY = -8.6
 COYOTE_BIG_BOMB_RETURN_GRAVITY = 0.28
 COYOTE_BIG_BOMB_BOSS_DAMAGE = 5
+COYOTE_BIG_BOMB_RETURNS_REQUIRED = 5
+FINAL_BOSS_DEFAULT_HITS_REQUIRED = 35
+COYOTE_HITS_REQUIRED = COYOTE_BIG_BOMB_RETURNS_REQUIRED * COYOTE_BIG_BOMB_BOSS_DAMAGE
+BOSS_REWARD_POINTS = {
+    4: BIRD_MINIBOSS_HITS_REQUIRED,
+    7: CACTUS_MINIBOSS_HITS_REQUIRED,
+    10: FINAL_BOSS_DEFAULT_HITS_REQUIRED,
+}
 COYOTE_PIT_WIDTH = 86
 COYOTE_PIT_LIFE_MS = 6500
 COYOTE_MAX_PITS = 3
@@ -211,6 +244,8 @@ SHOP_COIN_BOOST_MS = 60000
 SHOP_JUMP_SHOES_MS = 30000
 SHOP_JUMP_SHOES_FACTOR = 1.18
 SHOP_NOTICE_MS = 1800
+PRE_BOSS_SCENE_NOTICE_MS = 2200
+COYOTE_CAVE_FLASH_MS = 180
 SHOP_ITEMS = (
     {
         "key": "extra_life",
@@ -269,15 +304,20 @@ CREDITS_FINISH_PAD_PX = 120
 SCREENSHOT_NOTICE_MS = 2200
 GROUND_Y = 460
 
-# Progression per level: first chapter = 6 points, then +1 point each chapter.
-LEVEL_POINT_REQUIREMENTS = [6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
-LEVEL_TOTAL_THRESHOLDS = []
+# Progression per level: first chapter = 6 cleared obstacles, then +3 obstacles each chapter.
+LEVEL_OBSTACLE_REQUIREMENTS = [6, 9, 12, 15, 18, 21, 24, 27, 30, 33]
+LEVEL_OBSTACLE_TOTAL_THRESHOLDS = []
 _level_total = 0
-for _points_needed in LEVEL_POINT_REQUIREMENTS:
-    _level_total += _points_needed
-    LEVEL_TOTAL_THRESHOLDS.append(_level_total)
-LEVEL_START_SCORES = [0] + LEVEL_TOTAL_THRESHOLDS[:-1]
-FINAL_LEVEL_TOTAL_SCORE = LEVEL_TOTAL_THRESHOLDS[-1]
+for _obstacles_needed in LEVEL_OBSTACLE_REQUIREMENTS:
+    _level_total += _obstacles_needed
+    LEVEL_OBSTACLE_TOTAL_THRESHOLDS.append(_level_total)
+LEVEL_START_OBSTACLE_COUNTS = [0] + LEVEL_OBSTACLE_TOTAL_THRESHOLDS[:-1]
+FINAL_LEVEL_TOTAL_OBSTACLES = LEVEL_OBSTACLE_TOTAL_THRESHOLDS[-1]
+
+# Score remains separate from level progression so coins and high-value obstacles can still award points.
+LEVEL_SCORE_REFERENCE_TOTALS = list(LEVEL_OBSTACLE_TOTAL_THRESHOLDS)
+LEVEL_START_SCORES = [0] + LEVEL_SCORE_REFERENCE_TOTALS[:-1]
+FINAL_LEVEL_TOTAL_SCORE = LEVEL_SCORE_REFERENCE_TOTALS[-1]
 
 LEVEL_NAMES = {
     1: "Enter Cactus Land...",
@@ -418,6 +458,7 @@ OBSTACLE_CONFIG = {
 
 INFO_TEXT = [
     "i -> instructions screen",
+    "w -> play/stop welcome speech (in instructions)",
     "m -> music on/off",
     "s -> sound effects on/off",
     "f -> fullscreen on/off",
@@ -500,6 +541,12 @@ shop_jump_shoes_count = 0
 shield_until_ms = 0
 coin_boost_until_ms = 0
 jump_shoes_until_ms = 0
+pre_boss_scene_level = 0
+pending_boss_shop_level = 0
+boss_shop_seen = {
+    level: False for level in BOSS_LEVEL_ORDER
+}
+coyote_cave_flash_until_ms = 0
 player_x = float(DINO_X)
 JUMP_SOUND = None
 ROADRUNNER_JUMP_SOUND = None
@@ -530,7 +577,8 @@ duck_jump_expires_ms = 0
 is_fast_falling = False
 current_level = 1
 scroll_speed = BASE_SCROLL_SPEED
-next_level_score = LEVEL_TOTAL_THRESHOLDS[0]
+obstacles_cleared = 0
+next_level_obstacle_goal = LEVEL_OBSTACLE_TOTAL_THRESHOLDS[0]
 level_blink_until_ms = 0
 high_jump_warning_until_ms = 0
 high_jump_powerup_warning_until_ms = 0
@@ -611,10 +659,12 @@ def reset_game(show_splash=False):
     global dino_y, velocity_y, on_ground, score, coin_count, game_over, game_completed, game_started
     global shop_active, shop_notice_text, shop_notice_until_ms
     global shield_until_ms, coin_boost_until_ms, jump_shoes_until_ms
+    global pre_boss_scene_level, pending_boss_shop_level, boss_shop_seen
+    global coyote_cave_flash_until_ms
     global player_x
     global is_ducking, game_paused, bird_duck_scored, duck_jump_expires_ms, is_fast_falling
     global debug_coin_pressed, debug_coin_repeat_until_ms
-    global current_level, scroll_speed, next_level_score, level_blink_until_ms
+    global current_level, scroll_speed, obstacles_cleared, next_level_obstacle_goal, level_blink_until_ms
     global high_jump_warning_until_ms, high_jump_powerup_warning_until_ms
     global weapon_powerup_warning_until_ms, water_warning_until_ms
     global airplane_warning_until_ms, missed_plane_notice_until_ms
@@ -658,6 +708,12 @@ def reset_game(show_splash=False):
         shop_active = False
     shop_notice_text = ""
     shop_notice_until_ms = 0
+    pre_boss_scene_level = 0
+    pending_boss_shop_level = 0
+    boss_shop_seen = {
+        level: False for level in BOSS_LEVEL_ORDER
+    }
+    coyote_cave_flash_until_ms = 0
     debug_coin_pressed = False
     debug_coin_repeat_until_ms = 0
     is_ducking = False
@@ -667,7 +723,8 @@ def reset_game(show_splash=False):
     is_fast_falling = False
     current_level = 1
     scroll_speed = BASE_SCROLL_SPEED
-    next_level_score = LEVEL_TOTAL_THRESHOLDS[0]
+    obstacles_cleared = 0
+    next_level_obstacle_goal = LEVEL_OBSTACLE_TOTAL_THRESHOLDS[0]
     level_blink_until_ms = 0
     high_jump_warning_until_ms = 0
     high_jump_powerup_warning_until_ms = 0
@@ -1117,6 +1174,13 @@ def play_intro_speech(force_restart=True):
         INTRO_SPEECH_CHANNEL = INTRO_SPEECH_SOUND.play()
     except Exception:
         INTRO_SPEECH_CHANNEL = None
+
+
+def is_intro_speech_playing():
+    try:
+        return INTRO_SPEECH_CHANNEL is not None and INTRO_SPEECH_CHANNEL.get_busy()
+    except Exception:
+        return False
 
 
 def get_jump_sound():
@@ -1653,15 +1717,25 @@ def get_level_start_score(level):
     return int(LEVEL_START_SCORES[idx])
 
 
+def get_level_start_obstacle_count(level):
+    idx = max(1, min(MAX_LEVEL, int(level))) - 1
+    return int(LEVEL_START_OBSTACLE_COUNTS[idx])
+
+
+def get_level_total_obstacle_count(level):
+    idx = max(1, min(MAX_LEVEL, int(level))) - 1
+    return int(LEVEL_OBSTACLE_TOTAL_THRESHOLDS[idx])
+
+
 def get_level_total_score(level):
     idx = max(1, min(MAX_LEVEL, int(level))) - 1
-    return int(LEVEL_TOTAL_THRESHOLDS[idx])
+    return int(LEVEL_SCORE_REFERENCE_TOTALS[idx])
 
 
-def get_level_for_score(current_score):
-    score_value = max(0, int(current_score))
-    for idx, total_threshold in enumerate(LEVEL_TOTAL_THRESHOLDS, start=1):
-        if score_value < total_threshold:
+def get_level_for_obstacle_count(current_obstacle_count):
+    obstacle_value = max(0, int(current_obstacle_count))
+    for idx, total_threshold in enumerate(LEVEL_OBSTACLE_TOTAL_THRESHOLDS, start=1):
+        if obstacle_value < total_threshold:
             return idx
     return MAX_LEVEL
 
@@ -1676,12 +1750,13 @@ def save_character_checkpoint(level=None, character_key=None):
 
 
 def restore_character_checkpoint(character_key):
-    global current_level, score, scroll_speed, next_level_score
+    global current_level, score, scroll_speed, obstacles_cleared, next_level_obstacle_goal
     checkpoint_level = checkpoint_level_by_character.get(character_key, 1)
     current_level = checkpoint_level
     score = get_level_start_score(checkpoint_level)
+    obstacles_cleared = get_level_start_obstacle_count(checkpoint_level)
     scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
-    next_level_score = get_level_total_score(current_level)
+    next_level_obstacle_goal = get_level_total_obstacle_count(current_level)
 
 
 def start_game_from_selection():
@@ -1728,6 +1803,251 @@ def activate_shop_powerups_for_run():
     if shop_jump_shoes_count > 0:
         shop_jump_shoes_count -= 1
         jump_shoes_until_ms = max(jump_shoes_until_ms, now + SHOP_JUMP_SHOES_MS)
+
+
+def close_shop():
+    global shop_active, pending_boss_shop_level
+    was_boss_prep_shop = game_started and pending_boss_shop_level > 0
+    shop_active = False
+    if was_boss_prep_shop:
+        activate_shop_powerups_for_run()
+        set_shop_notice(f"Boss prep done for L{pending_boss_shop_level}.", duration_ms=1400)
+        pending_boss_shop_level = 0
+
+
+def is_pre_boss_scene_active():
+    return game_started and pre_boss_scene_level > 0 and boss_state is None
+
+
+def get_pre_boss_shop_rect():
+    return (64, GROUND_Y - 204, 276, 158)
+
+
+def get_pre_boss_entrance_rect(level=None):
+    target_level = pre_boss_scene_level if level is None else level
+    if target_level >= 10:
+        return (width - 164, GROUND_Y - 118, 102, 118)
+    return (width - 196, GROUND_Y - 156, 132, 156)
+
+
+def get_shop_overlay_layout():
+    stall_x = 86
+    stall_y = 136
+    stall_w = 628
+    stall_h = 246
+    icon_size = 76
+    icon_positions = (
+        (stall_x + 118, stall_y + 78),
+        (stall_x + 244, stall_y + 58),
+        (stall_x + 378, stall_y + 78),
+        (stall_x + 504, stall_y + 58),
+    )
+    layout = []
+    for item, (icon_x, icon_y) in zip(SHOP_ITEMS, icon_positions):
+        layout.append((item, icon_x, icon_y, icon_size, icon_size))
+    return stall_x, stall_y, stall_w, stall_h, layout
+
+
+def draw_shop_item_icon(item_key, x, y, size, theme):
+    icon_img = SHOP_ITEM_ICONS.get(item_key)
+    if icon_img is not None:
+        image(icon_img, x, y, size, size)
+        return
+
+    px = int(x)
+    py = int(y)
+    icon_w = int(size)
+    icon_h = int(size)
+    if item_key == "extra_life":
+        fill(214, 36, 58)
+        rect(px + 14, py + 12, 16, 16)
+        rect(px + 30, py + 12, 16, 16)
+        rect(px + 10, py + 24, 40, 14)
+        rect(px + 16, py + 38, 28, 12)
+        rect(px + 22, py + 50, 16, 10)
+        return
+    if item_key == "shield":
+        fill(64, 122, 210)
+        rect(px + 20, py + 14, 32, 34)
+        arc(px + 36, py + 14, 32, 24, PI, TWO_PI)
+        fill(232, 240, 255)
+        rect(px + 28, py + 22, 16, 22)
+        return
+    if item_key == "coin_boost":
+        fill(240, 194, 48)
+        rect(px + 16, py + 20, 18, 28)
+        rect(px + 34, py + 16, 18, 28)
+        fill(204, 146, 24)
+        rect(px + 18, py + 24, 14, 20)
+        rect(px + 36, py + 20, 14, 20)
+        fill(*theme["text"])
+        text_size(16)
+        text("x2", px + 22, py + 64)
+        return
+    fill(72, 166, 238)
+    rect(px + 12, py + 36, 22, 16)
+    rect(px + 36, py + 42, 24, 12)
+    fill(34, 92, 164)
+    rect(px + 10, py + 50, 28, 8)
+    rect(px + 36, py + 52, 28, 8)
+
+
+def draw_shop_icon_button(item, idx, x, y, w, h, theme):
+    pulse = (math.sin((millis() / 185.0) + idx * 0.85) + 1.0) * 0.5
+    glow_color = (255, 220, 104) if pulse > 0.52 else theme["accent"]
+    outer_pad = 3 + int(pulse * 3)
+    fill(255, 250, 238)
+    rect(x, y, w, h)
+    draw_rounded_rect_outline(x, y, w, h, 12, theme["ground_line"], 2)
+    draw_rounded_rect_outline(x - outer_pad, y - outer_pad, w + outer_pad * 2, h + outer_pad * 2, 14, glow_color, 1 + int(pulse * 2))
+    draw_shop_item_icon(item["key"], x + 8, y + 6, w - 16, theme)
+    fill(*theme["text"])
+    text_size(13)
+    text(item["label"], x - 8, y + h + 18)
+    text(f"{item['cost']}c", x + 8, y + h + 34)
+    text(f"x{get_shop_item_count(item['key'])}", x + 44, y + h + 34)
+
+
+def draw_badger_shop_fallback(x, y, w, h, theme):
+    fill(135, 84, 48)
+    rect(x + 16, y + 82, w - 32, h - 92)
+    fill(198, 58, 48)
+    rect(x + 8, y + 26, w - 16, 30)
+    fill(246, 220, 172)
+    for idx in range(6):
+        rect(x + 14 + idx * 42, y + 58, 30, 18)
+    draw_shop_seller_with_tie(x + 26, y + 24)
+    fill(92, 58, 28)
+    rect(x + 22, y + h - 30, w - 44, 16)
+    fill(*theme["text"])
+    text_size(16)
+    text("BADGER SHOP", x + 78, y + 20)
+
+
+def draw_pre_boss_shop_world(theme):
+    shop_x, shop_y, shop_w, shop_h = get_pre_boss_shop_rect()
+    if BADGER_SHOP_IMG is not None:
+        image(BADGER_SHOP_IMG, shop_x, shop_y, shop_w, shop_h)
+    else:
+        draw_badger_shop_fallback(shop_x, shop_y, shop_w, shop_h, theme)
+    fill(*theme["text"])
+    text_size(16)
+    text("DOWN: open shop", shop_x + 74, shop_y + shop_h + 22)
+
+
+def draw_pre_boss_entrance(level, theme):
+    entry_x, entry_y, entry_w, entry_h = get_pre_boss_entrance_rect(level)
+    if level >= 10:
+        fill(70, 154, 76)
+        rect(entry_x, entry_y + 24, entry_w, entry_h - 24)
+        rect(entry_x - 8, entry_y + 18, entry_w + 16, 18)
+        fill(42, 110, 46)
+        rect(entry_x + 10, entry_y + 36, entry_w - 20, entry_h - 40)
+        fill(250, 224, 92)
+        rect(entry_x + entry_w // 2 - 4, entry_y - 22, 8, 22)
+        rect(entry_x + entry_w // 2 - 18, entry_y - 10, 36, 8)
+        fill(*theme["text"])
+        text_size(16)
+        text("DOWN: enter cave", entry_x - 8, entry_y + entry_h + 22)
+        return
+
+    fill(128, 88, 52)
+    rect(entry_x + 18, entry_y + 16, entry_w - 36, entry_h - 16)
+    fill(72, 42, 24)
+    rect(entry_x + 36, entry_y + 44, entry_w - 72, entry_h - 44)
+    fill(210, 58, 52)
+    rect(entry_x + 10, entry_y, entry_w - 20, 24)
+    fill(*theme["text"])
+    text_size(16)
+    text("DOWN: face boss", entry_x - 2, entry_y + entry_h + 22)
+
+
+def draw_pre_boss_scene(theme):
+    level = pre_boss_scene_level
+    if level <= 0:
+        return
+
+    if level >= 10:
+        background(162, 156, 148)
+        fill(112, 110, 108)
+        rect(0, GROUND_Y, width, 40)
+        fill(136, 132, 126)
+        rect(0, 132, width, 44)
+    else:
+        muted_bg = tuple(max(28, int(channel * 0.82)) for channel in theme["bg"])
+        muted_ground = tuple(max(36, int(channel * 0.8)) for channel in theme["ground_fill"])
+        background(*muted_bg)
+        fill(*muted_ground)
+        rect(0, GROUND_Y, width, 40)
+
+    stroke(*theme["ground_line"])
+    stroke_weight(2)
+    line(0, GROUND_Y, width, GROUND_Y)
+    no_stroke()
+    fill(248, 242, 224)
+    rect(370, GROUND_Y - 46, 84, 8)
+    rect(394, GROUND_Y - 82, 40, 36)
+    draw_pre_boss_shop_world(theme)
+    draw_pre_boss_entrance(level, theme)
+
+    fill(*theme["text"])
+    text_size(24)
+    if level >= 10:
+        text("Boss approach: visit the shop, then enter the pipe.", 116, 44)
+    else:
+        text("Boss approach: visit the shop, then step into the arena.", 110, 44)
+    text_size(18)
+    text(f"Level {level}: {LEVEL_NAMES.get(level, 'Boss Stage')}", 210, 74)
+
+    player_hitbox = get_dino_hitbox()
+    shop_rect = get_pre_boss_shop_rect()
+    entry_rect = get_pre_boss_entrance_rect(level)
+    if rects_overlap(player_hitbox, shop_rect):
+        fill(212, 60, 44)
+        text_size(20)
+        text("Press DOWN at the stall", 262, 108)
+    elif rects_overlap(player_hitbox, entry_rect):
+        fill(212, 60, 44)
+        text_size(20)
+        if level >= 10:
+            text("Press DOWN to go underground", 238, 108)
+        else:
+            text("Press DOWN to start the boss fight", 214, 108)
+
+
+def start_pending_boss_encounter(level):
+    global boss_state, boss_intro_until_ms, player_shot_cooldown_until_ms
+    global pre_boss_scene_level, pending_boss_shop_level, shop_active
+    global player_x, boss_left_pressed, boss_right_pressed
+    pre_boss_scene_level = 0
+    pending_boss_shop_level = 0
+    shop_active = False
+    player_x = float(DINO_X)
+    boss_left_pressed = False
+    boss_right_pressed = False
+    boss_state = spawn_boss_for_level(level)
+    boss_intro_until_ms = millis() + BOSS_INTRO_DURATION_MS
+    reset_projectile_pool(player_projectiles)
+    player_shot_cooldown_until_ms = 0
+
+
+def try_interact_pre_boss_scene():
+    global shop_active, pending_boss_shop_level
+    if not is_pre_boss_scene_active() or game_over:
+        return False
+
+    player_hitbox = get_dino_hitbox()
+    if rects_overlap(player_hitbox, get_pre_boss_shop_rect()):
+        pending_boss_shop_level = pre_boss_scene_level
+        shop_active = True
+        set_shop_notice("Buy gear from the badger stall, then press Back.", duration_ms=PRE_BOSS_SCENE_NOTICE_MS)
+        return True
+
+    if rects_overlap(player_hitbox, get_pre_boss_entrance_rect(pre_boss_scene_level)):
+        start_pending_boss_encounter(pre_boss_scene_level)
+        return True
+
+    return False
 
 
 def get_shop_item_count(item_key):
@@ -1794,13 +2114,13 @@ def apply_player_hit(hit_sound=None):
     play_sfx(hit_sound if hit_sound is not None else CRASH_SOUND)
 
 
-def update_level_from_score():
-    global current_level, scroll_speed, next_level_score, level_blink_until_ms, pending_airplane_spawn
-    new_level = get_level_for_score(score)
+def update_level_from_progress():
+    global current_level, scroll_speed, next_level_obstacle_goal, level_blink_until_ms, pending_airplane_spawn
+    new_level = get_level_for_obstacle_count(obstacles_cleared)
     if new_level > current_level:
         current_level = new_level
         scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
-        next_level_score = get_level_total_score(current_level)
+        next_level_obstacle_goal = get_level_total_obstacle_count(current_level)
         level_blink_until_ms = millis() + LEVEL_BLINK_DURATION_MS
         show_level_name_announcement(current_level)
         save_character_checkpoint(current_level)
@@ -1810,18 +2130,25 @@ def update_level_from_score():
             pending_airplane_spawn = False
 
 
+def register_cleared_obstacle(amount=1):
+    global obstacles_cleared
+    obstacles_cleared += max(0, int(amount))
+    update_level_from_progress()
+
+
 def debug_step_level(level_delta):
-    global current_level, score, scroll_speed, next_level_score, level_blink_until_ms, pending_airplane_spawn
+    global current_level, score, scroll_speed, obstacles_cleared, next_level_obstacle_goal, level_blink_until_ms, pending_airplane_spawn
     old_level = current_level
     target_level = max(1, min(MAX_LEVEL, current_level + level_delta))
     if target_level == old_level:
         return
 
-    # In debug mode, score snaps to the start score of the selected level.
+    # In debug mode, score and cleared-obstacle count snap to the selected level start.
     score = get_level_start_score(target_level)
+    obstacles_cleared = get_level_start_obstacle_count(target_level)
     current_level = target_level
     scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
-    next_level_score = get_level_total_score(current_level)
+    next_level_obstacle_goal = get_level_total_obstacle_count(current_level)
     level_blink_until_ms = millis() + LEVEL_BLINK_DURATION_MS
     show_level_name_announcement(current_level)
     save_character_checkpoint(current_level)
@@ -1911,6 +2238,14 @@ def draw_projectile(projectile):
         return
 
     if kind in ("enemy_big_tnt", "enemy_big_tnt_ground", "returned_big_tnt"):
+        if kind == "enemy_big_tnt":
+            glow_w = w + 28
+            glow_x = x - ((glow_w - w) // 2)
+            glow_y = GROUND_Y - 10
+            fill(255, 214, 84)
+            rect(glow_x, glow_y, glow_w, 4)
+            fill(246, 164, 34)
+            rect(glow_x + 10, glow_y + 4, max(12, glow_w - 20), 3)
         fill(182, 24, 24)
         rect(x, y, w, h)
         fill(120, 10, 10)
@@ -2272,7 +2607,7 @@ def spawn_boss_for_level(level):
             "min_y": 118.0,
             "max_y": 300.0,
             "hits_taken": 0,
-            "hits_required": 15,
+            "hits_required": BIRD_MINIBOSS_HITS_REQUIRED,
             "meter_steps": 20,
             "enemy_projectiles": create_projectile_pool(),
             "attack_interval_ms": 1120,
@@ -2292,10 +2627,10 @@ def spawn_boss_for_level(level):
             "vy": 1.2,
             "min_y": 150.0,
             "max_y": 210.0,
-            "branch_hp": [5, 5, 5, 5, 5],
+            "branch_hp": [3, 3, 3, 3, 3],
             "hits_taken": 0,
-            "hits_required": 25,
-            "meter_steps": 25,
+            "hits_required": CACTUS_MINIBOSS_HITS_REQUIRED,
+            "meter_steps": CACTUS_MINIBOSS_HITS_REQUIRED,
             "enemy_projectiles": create_projectile_pool(),
             "attack_interval_ms": 860,
             "last_attack_ms": now,
@@ -2332,8 +2667,8 @@ def spawn_boss_for_level(level):
         "min_y": min_y,
         "max_y": max_y,
         "hits_taken": 0,
-        "hits_required": 25 if form_name == "ReuzenCoyote" else 35,
-        "meter_steps": 25 if form_name == "ReuzenCoyote" else 35,
+        "hits_required": COYOTE_HITS_REQUIRED if form_name == "ReuzenCoyote" else FINAL_BOSS_DEFAULT_HITS_REQUIRED,
+        "meter_steps": COYOTE_HITS_REQUIRED if form_name == "ReuzenCoyote" else FINAL_BOSS_DEFAULT_HITS_REQUIRED,
         "enemy_projectiles": create_projectile_pool(),
         "attack_interval_ms": 760,
         "phase": "laugh",
@@ -2427,9 +2762,10 @@ def draw_coyote_pits(boss, theme):
 
 
 def maybe_start_boss_encounter():
-    global boss_state, boss_intro_until_ms, player_shot_cooldown_until_ms
-    global pending_weapon_powerup_level
-    if boss_state is not None or game_over or game_completed or not game_started or game_paused or flight_mode:
+    global pending_weapon_powerup_level, pre_boss_scene_level
+    global boss_left_pressed, boss_right_pressed, player_x
+    global dino_y, velocity_y, on_ground, is_ducking, is_fast_falling
+    if boss_state is not None or pre_boss_scene_level > 0 or game_over or game_completed or not game_started or game_paused or flight_mode or shop_active:
         return
 
     # Skip older boss tiers once the player is already in a higher tier.
@@ -2440,15 +2776,26 @@ def maybe_start_boss_encounter():
 
     for level in BOSS_LEVEL_ORDER:
         if current_level >= level and not boss_completed[level]:
-            has_weapon_for_level = weapon_powerup_ready and weapon_powerup_level == level
-            if not has_weapon_for_level:
+            requires_weapon = level != 10
+            has_weapon_for_level = (not requires_weapon) or (weapon_powerup_ready and weapon_powerup_level == level)
+            if requires_weapon and not has_weapon_for_level:
                 pending_weapon_powerup_level = level
                 return
             pending_weapon_powerup_level = 0
-            boss_state = spawn_boss_for_level(level)
-            boss_intro_until_ms = millis() + BOSS_INTRO_DURATION_MS
-            reset_projectile_pool(player_projectiles)
-            player_shot_cooldown_until_ms = 0
+            if not boss_shop_seen.get(level, False):
+                boss_shop_seen[level] = True
+                pre_boss_scene_level = level
+                player_x = 48.0
+                boss_left_pressed = False
+                boss_right_pressed = False
+                dino_y = DINO_Y
+                velocity_y = 0
+                on_ground = True
+                is_ducking = False
+                is_fast_falling = False
+                set_shop_notice(f"Badger shop before boss L{level}. Walk right and press DOWN.", duration_ms=PRE_BOSS_SCENE_NOTICE_MS)
+                return
+            start_pending_boss_encounter(level)
             break
 
 
@@ -2627,7 +2974,6 @@ def finish_boss_if_defeated(boss):
     spawn_final_boss_explosion_burst(boss_snapshot, count=burst_count)
     play_sfx(BOSS_EXPLOSION_SOUND)
     score += BOSS_REWARD_POINTS.get(boss["level"], 0)
-    update_level_from_score()
     if boss["level"] < 10:
         mini_boss_defeat_sequences.append({
             "snapshot": boss_snapshot,
@@ -2646,7 +2992,7 @@ def finish_boss_if_defeated(boss):
 
 
 def update_enemy_projectiles(boss):
-    global game_over
+    global game_over, coyote_cave_flash_until_ms
     player_hitbox = get_dino_hitbox()
     for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
         if projectile["kind"] == "returned_big_tnt":
@@ -2664,6 +3010,7 @@ def update_enemy_projectiles(boss):
             if rects_overlap(bomb_hitbox, boss_hitbox):
                 boss["hits_taken"] += COYOTE_BIG_BOMB_BOSS_DAMAGE
                 projectile["active"] = False
+                coyote_cave_flash_until_ms = millis() + COYOTE_CAVE_FLASH_MS
                 spawn_explosion_effect(
                     projectile_rect[0] + (projectile_rect[2] / 2),
                     projectile_rect[1] + (projectile_rect[3] / 2),
@@ -2727,6 +3074,7 @@ def update_enemy_projectiles(boss):
 
         if projectile["kind"] == "enemy_big_tnt_ground":
             if millis() >= projectile.get("explode_at", 0):
+                coyote_cave_flash_until_ms = millis() + COYOTE_CAVE_FLASH_MS
                 projectile.update({
                     "kind": "big_tnt_blast",
                     "x": projectile["x"] - 22,
@@ -3069,6 +3417,24 @@ def update_and_draw_boss_mode(theme, update_world=True):
             apply_player_hit(CRASH_SOUND)
             return
 
+    if boss.get("form") == "ReuzenCoyote":
+        flash_ratio = max(0.0, (coyote_cave_flash_until_ms - millis()) / max(1, COYOTE_CAVE_FLASH_MS))
+        cave_base = 72 + int(76 * flash_ratio)
+        ground_base = 56 + int(84 * flash_ratio)
+        background(cave_base, cave_base, cave_base + 6)
+        fill(ground_base, ground_base, ground_base + 8)
+        rect(0, GROUND_Y, width, 40)
+        fill(44 + int(54 * flash_ratio), 44 + int(54 * flash_ratio), 48 + int(58 * flash_ratio))
+        rect(0, 82, width, 56)
+        rect(0, 0, width, 34)
+        fill(92 + int(70 * flash_ratio), 92 + int(70 * flash_ratio), 96 + int(70 * flash_ratio))
+        rect(58, 110, 42, 248)
+        rect(width - 104, 96, 48, 268)
+        stroke(108 + int(80 * flash_ratio), 108 + int(80 * flash_ratio), 112 + int(80 * flash_ratio))
+        stroke_weight(2)
+        line(0, GROUND_Y, width, GROUND_Y)
+        no_stroke()
+
     draw_coyote_pits(boss, theme)
     draw_boss_entity(boss)
     draw_boss_meter(boss, theme)
@@ -3082,7 +3448,7 @@ def update_and_draw_boss_mode(theme, update_world=True):
     fill(*theme["text"])
     text_size(16)
     if boss.get("form") == "ReuzenCoyote":
-        text("TIP: throw back 5 big bombs with SPACE", 20, 66)
+        text(f"TIP: throw back {COYOTE_BIG_BOMB_RETURNS_REQUIRED} big bombs with SPACE", 20, 66)
     else:
         weapon_label = get_player_weapon_profile()["label"]
         text(f"Weapon: {weapon_label} (SPACE)", 20, 66)
@@ -3095,7 +3461,7 @@ def update_and_draw_boss_mode(theme, update_world=True):
         elif boss.get("form") == "ReuzenCoyote":
             fill(200, 40, 40)
             text_size(30)
-            text("Throw back 5 big bombs!", width // 2 - 166, 34)
+            text(f"Throw back {COYOTE_BIG_BOMB_RETURNS_REQUIRED} big bombs!", width // 2 - 166, 34)
         fill(*theme["accent"])
         text_size(24)
         text(boss["name"], width // 2 - 150, 112)
@@ -3204,6 +3570,11 @@ def draw_hud(theme, force_visible=False):
     visible = True if force_visible else (not blink_active or should_show_blink_phase())
 
     if visible:
+        level_idx = max(0, min(MAX_LEVEL - 1, current_level - 1))
+        level_goal = LEVEL_OBSTACLE_REQUIREMENTS[level_idx]
+        level_start_obstacles = get_level_start_obstacle_count(current_level)
+        level_progress = max(0, obstacles_cleared - level_start_obstacles)
+        level_progress = min(level_goal, level_progress)
         fill(*theme["text"])
         text_size(24)
         text(f"Score: {score}", 20, 40)
@@ -3212,20 +3583,26 @@ def draw_hud(theme, force_visible=False):
         status_y = 88
         if is_shield_active():
             shield_left = max(0.0, (shield_until_ms - millis()) / 1000.0)
-            text(f"Shield: {shield_left:.1f}s", 20, status_y)
+            draw_shop_item_icon("shield", 18, status_y - 14, 18, theme)
+            text(f"Shield: {shield_left:.1f}s", 42, status_y)
             status_y += 20
         if is_coin_boost_active():
             coin_left = max(0.0, (coin_boost_until_ms - millis()) / 1000.0)
-            text(f"Coin x2: {coin_left:.0f}s", 20, status_y)
+            draw_shop_item_icon("coin_boost", 18, status_y - 14, 18, theme)
+            text(f"Coin x2: {coin_left:.0f}s", 42, status_y)
             status_y += 20
         if is_jump_shoes_active():
             shoes_left = max(0.0, (jump_shoes_until_ms - millis()) / 1000.0)
-            text(f"Jump shoes: {shoes_left:.0f}s", 20, status_y)
+            draw_shop_item_icon("jump_shoes", 18, status_y - 14, 18, theme)
+            text(f"Jump shoes: {shoes_left:.0f}s", 42, status_y)
             status_y += 20
         if shop_extra_life_count > 0:
-            text(f"Extra lives: {shop_extra_life_count}", 20, status_y)
+            draw_shop_item_icon("extra_life", 18, status_y - 14, 18, theme)
+            text(f"Extra lives: {shop_extra_life_count}", 42, status_y)
         text_size(24)
         text(f"Level: {current_level}", width - 150, 40)
+        text_size(16)
+        text(f"Obstacles: {level_progress}/{level_goal}", width - 190, 66)
 
     # During blink, briefly show level-up cue in accent color.
     if is_level_blink_active() and should_show_blink_phase():
@@ -3288,7 +3665,7 @@ def update_and_draw_flight_mode(theme, update_world=True):
             if not pipe["passed"] and pipe["x"] + FLIGHT_PIPE_WIDTH < flight_plane_x:
                 pipe["passed"] = True
                 score += FLIGHT_PIPE_POINTS
-                update_level_from_score()
+                register_cleared_obstacle()
 
         # Flight section ends when the next level is reached.
         if current_level >= flight_mode_exit_level:
@@ -3606,9 +3983,7 @@ def get_shop_back_button_rect():
     return btn_x, btn_y, btn_w, btn_h
 
 
-def draw_shop_seller_with_tie():
-    sx = 26
-    sy = 168
+def draw_shop_seller_with_tie(sx=26, sy=168):
     fill(255, 225, 186)
     rect(sx + 24, sy, 62, 52)
     fill(32, 32, 38)
@@ -3625,35 +4000,33 @@ def draw_shop_seller_with_tie():
 
 
 def draw_shop_screen(theme):
+    stall_x, stall_y, stall_w, stall_h, item_layout = get_shop_overlay_layout()
     fill(*theme["text"])
     text_size(40)
-    text("Powerup Shop", 252, 74)
+    title_text = "Powerup Shop"
+    subtitle_text = "Tie salesman offers upgrades. Click Buy."
+    if game_started and pending_boss_shop_level > 0:
+        title_text = f"Badger Shop L{pending_boss_shop_level}"
+        subtitle_text = "Boss prep: buy gear now, then press Back."
+    text(title_text, 214, 64)
     text_size(20)
-    text("Tie salesman offers upgrades. Click Buy.", 252, 102)
-    text(f"Coin pouch: {coin_count}/{MAX_COIN_POUCH}", 252, 126)
-    draw_shop_seller_with_tie()
+    text(subtitle_text, 214, 92)
+    text(f"Coin pouch: {coin_count}/{MAX_COIN_POUCH}", 214, 118)
 
-    for item, card_x, card_y, card_w, card_h in get_shop_item_layout():
-        fill(255, 255, 255)
-        no_stroke()
-        rect(card_x, card_y, card_w, card_h)
-        draw_rounded_rect_outline(card_x, card_y, card_w, card_h, 12, theme["ground_line"], 2)
+    fill(250, 248, 240)
+    rect(stall_x - 18, stall_y - 18, stall_w + 36, stall_h + 36)
+    draw_rounded_rect_outline(stall_x - 18, stall_y - 18, stall_w + 36, stall_h + 36, 18, theme["ground_line"], 2)
+    if BADGER_SHOP_IMG is not None:
+        image(BADGER_SHOP_IMG, stall_x, stall_y, stall_w, stall_h)
+    else:
+        draw_badger_shop_fallback(stall_x, stall_y, stall_w, stall_h, theme)
 
-        fill(*theme["text"])
-        text_size(21)
-        text(item["label"], card_x + 12, card_y + 30)
-        text_size(16)
-        text(item["desc"], card_x + 12, card_y + 54)
-        text(f"Cost: {item['cost']} coins", card_x + 12, card_y + 76)
-        text(f"Owned: {get_shop_item_count(item['key'])}", card_x + 12, card_y + 96)
+    for idx, (item, icon_x, icon_y, icon_w, icon_h) in enumerate(item_layout):
+        draw_shop_icon_button(item, idx, icon_x, icon_y, icon_w, icon_h, theme)
 
-        buy_x, buy_y, buy_w, buy_h = get_shop_buy_button_rect(card_x, card_y, card_w, card_h)
-        fill(255, 255, 255)
-        rect(buy_x, buy_y, buy_w, buy_h)
-        draw_rounded_rect_outline(buy_x, buy_y, buy_w, buy_h, 8, theme["accent"], 2)
-        fill(*theme["text"])
-        text_size(18)
-        text("Buy", buy_x + 22, buy_y + 22)
+    fill(*theme["text"])
+    text_size(14)
+    text("Click the glowing items on the stall to buy them.", stall_x + 124, stall_y + stall_h + 26)
 
     back_x, back_y, back_w, back_h = get_shop_back_button_rect()
     fill(255, 255, 255)
@@ -3665,8 +4038,8 @@ def draw_shop_screen(theme):
 
     if millis() < shop_notice_until_ms and shop_notice_text:
         fill(*theme["accent"])
-        text_size(20)
-        text(shop_notice_text, 250, height - 26)
+        text_size(18)
+        text(shop_notice_text, 168, height - 26)
 
 
 def draw_crown_badge_on_card(x, card_y, card_w, card_h):
@@ -3766,7 +4139,6 @@ def update_and_draw_bonus_coins():
             coin_count = min(MAX_COIN_POUCH, coin_count + gained_coins)
             score += gained_coins
             play_sfx(COIN_SOUND)
-            update_level_from_score()
             continue
 
         remaining.append(coin)
@@ -3792,7 +4164,7 @@ def update_and_draw_extra_obstacles(theme):
 
         if not game_paused and not game_over and draw_x < -draw_w:
             score += obstacle_cfg["points"]
-            update_level_from_score()
+            register_cleared_obstacle()
             continue
 
         obstacle_hitbox = get_extra_obstacle_hitbox(obstacle)
@@ -3819,6 +4191,7 @@ def draw():
     global weapon_powerup_ready, weapon_powerup_level, pending_weapon_powerup_level
     global final_boss_snapshot, final_boss_defeat_until_ms, final_boss_next_blast_ms
     global pending_credits_after_victory
+    global player_x
     theme = get_theme()
     update_background_music()
     if score > high_score:
@@ -3959,6 +4332,33 @@ def draw():
         draw_debug_overlay()
         return
 
+    if shop_active:
+        draw_main_character()
+        draw_shop_screen(theme)
+        draw_hud(theme, force_visible=True)
+        draw_debug_overlay()
+        return
+
+    if pre_boss_scene_level > 0:
+        if not game_paused:
+            move_dir = int(boss_right_pressed) - int(boss_left_pressed)
+            if move_dir != 0:
+                min_player_x = 24.0
+                max_player_x = float(width - DINO_W - 24)
+                player_x = max(min_player_x, min(max_player_x, player_x + (move_dir * BOSS_PLAYER_SPEED)))
+            update_player_vertical_motion()
+        draw_pre_boss_scene(theme)
+        draw_main_character()
+        if game_paused:
+            fill(40)
+            text_size(34)
+            text("Paused", width // 2 - 65, height // 2 - 8)
+            text_size(18)
+            text("Press P to continue", width // 2 - 96, height // 2 + 22)
+        draw_hud(theme, force_visible=True)
+        draw_debug_overlay()
+        return
+
     maybe_start_boss_encounter()
     if boss_state is not None:
         update_and_draw_boss_mode(theme, update_world=(not game_paused and not game_over))
@@ -4072,7 +4472,7 @@ def draw():
             if obstacle_cfg.get("requires_duck_score", False) and not bird_duck_scored:
                 gained_points = 0
             score += gained_points
-            update_level_from_score()
+            register_cleared_obstacle()
             spawn_obstacle()
 
         if obstacle_type == "airplane_pickup":
@@ -4115,6 +4515,7 @@ def draw():
                     obstacle_draw_y,
                     obstacle_draw_w,
                 )
+                register_cleared_obstacle()
                 spawn_obstacle()
                 draw_main_character()
                 draw_hud(theme)
@@ -4126,19 +4527,21 @@ def draw():
         if obstacle_type == "high_jump_powerup" and rects_overlap(dino_hitbox, obstacle_hitbox):
             high_jump_powerup_charges = HIGH_JUMP_POWERUP_MAX_CHARGES
             high_jump_powerup_warning_until_ms = millis() + HIGH_JUMP_POWERUP_NOTICE_MS
+            register_cleared_obstacle()
             spawn_obstacle()
         elif obstacle_type == "weapon_powerup" and rects_overlap(dino_hitbox, obstacle_hitbox):
             weapon_powerup_ready = True
             weapon_powerup_level = pending_weapon_powerup_level if pending_weapon_powerup_level > 0 else current_level
             pending_weapon_powerup_level = 0
             weapon_powerup_warning_until_ms = millis() + WEAPON_POWERUP_NOTICE_MS
+            register_cleared_obstacle()
             spawn_obstacle()
         elif obstacle_type == "coin" and rects_overlap(dino_hitbox, obstacle_hitbox):
             gained_coins = COIN_SCORE_VALUE * (2 if is_coin_boost_active() else 1)
             coin_count = min(MAX_COIN_POUCH, coin_count + gained_coins)
             score += gained_coins
             play_sfx(COIN_SOUND)
-            update_level_from_score()
+            register_cleared_obstacle()
             spawn_obstacle()
         elif obstacle_type == "water_lily":
             water_hitbox = obstacle_hitbox
@@ -4224,10 +4627,7 @@ def key_pressed():
         allow_quit=False,
     )
     if pressed_key == "i":
-        if shared.show_info:
-            play_intro_speech(force_restart=True)
-        else:
-            stop_intro_speech()
+        stop_intro_speech()
         update_background_music(force=True)
         return
     if pressed_key == "s":
@@ -4245,8 +4645,8 @@ def key_pressed():
             is_fullscreen = True
         return
 
-    if not game_started and shop_active and (pressed_key == "b" or key_code == pygame.K_ESCAPE):
-        shop_active = False
+    if shop_active and (pressed_key == "b" or key_code == pygame.K_ESCAPE):
+        close_shop()
         return
 
     if quit_confirm_active:
@@ -4270,6 +4670,12 @@ def key_pressed():
         return
 
     if shared.show_info:
+        if pressed_key == "w":
+            if is_intro_speech_playing():
+                stop_intro_speech()
+            else:
+                play_intro_speech(force_restart=True)
+            return
         if pressed_key == "l":
             if key == "L":
                 debug_step_level(-1)
@@ -4310,6 +4716,9 @@ def key_pressed():
         game_paused = not game_paused
         return
 
+    if shop_active:
+        return
+
     if game_over and key == " ":
         if isDebugMode:
             save_character_checkpoint()
@@ -4341,12 +4750,16 @@ def key_pressed():
     if game_paused:
         return
 
-    if game_started and boss_state is not None and not game_over:
+    if game_started and (boss_state is not None or pre_boss_scene_level > 0) and not game_over:
         if key_code == pygame.K_LEFT:
             boss_left_pressed = True
             return
         if key_code == pygame.K_RIGHT:
             boss_right_pressed = True
+            return
+
+    if game_started and pre_boss_scene_level > 0 and not game_over and key_code == pygame.K_DOWN:
+        if try_interact_pre_boss_scene():
             return
 
     if game_started and not game_over and key == " " and boss_state is not None:
@@ -4430,23 +4843,24 @@ def key_released(released_key):
 
 
 def mouse_clicked(x, y, button):
-    global selected_character_idx, shop_active
+    global selected_character_idx, shop_active, quit_confirm_active
     if button != 1:
         return
     if shared.show_info:
         return
-    if game_started:
-        return
 
     if shop_active:
-        for item, card_x, card_y, card_w, card_h in get_shop_item_layout():
-            buy_x, buy_y, buy_w, buy_h = get_shop_buy_button_rect(card_x, card_y, card_w, card_h)
-            if point_in_rect(x, y, buy_x, buy_y, buy_w, buy_h):
+        _, _, _, _, item_layout = get_shop_overlay_layout()
+        for item, icon_x, icon_y, icon_w, icon_h in item_layout:
+            if point_in_rect(x, y, icon_x, icon_y, icon_w, icon_h):
                 buy_shop_item(item["key"])
                 return
         back_x, back_y, back_w, back_h = get_shop_back_button_rect()
         if point_in_rect(x, y, back_x, back_y, back_w, back_h):
-            shop_active = False
+            close_shop()
+        return
+
+    if game_started:
         return
 
     for idx, card_x, card_y, card_w, card_h in get_character_select_layout():
@@ -4462,7 +4876,7 @@ def mouse_clicked(x, y, button):
     explain_x, explain_y, explain_w, explain_h = get_explain_button_rect()
     if point_in_rect(x, y, explain_x, explain_y, explain_w, explain_h):
         shared.show_info = True
-        play_intro_speech(force_restart=True)
+        stop_intro_speech()
         update_background_music(force=True)
         return
 

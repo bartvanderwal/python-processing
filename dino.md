@@ -42,81 +42,9 @@ Deze game is een variant op de Chrome Dino game, met meerdere speelbare karakter
 - Bij een naderende torencactus verschijnt kort:
   - `Prepare for high jump: duck first then quickly jump.`
 
-## Levelsysteem
+## Systems Guide
 
-- De game heeft 10 levels (`MAX_LEVEL = 10`).
-- Levels stijgen op cumulatieve scoregrenzen met oplopende hoofdstuklengte.
-- Bij elke level-up:
-  - De scrollsnelheid stijgt met factor `1.1`.
-  - Score en level-indicator knipperen kort.
-  - De spawnmix verandert, met hogere spawndichtheid en complexere patronen.
-
-### Scoregrenzen per level
-
-- Level 1: 6 punten.
-- Level 2: +7 punten (totaal 13).
-- Level 3: +8 punten (totaal 21).
-- Level 4: +9 punten (totaal 30) - minibosshoofdstuk.
-- Level 5: +10 punten (totaal 40).
-- Level 6: +11 punten (totaal 51).
-- Level 7: +12 punten (totaal 63) - minibosshoofdstuk.
-- Level 8: +13 punten (totaal 76).
-- Level 9: +14 punten (totaal 90).
-- Level 10: +15 punten (totaal 105) - eindbaashoofdstuk.
-
-### Progressie per fase
-
-- Level 1, `Enter Cactus Land...`:
-  - Introductie van de woestijn.
-  - Basisobstakels: lage cactus, hoge cactus en lage vogel.
-  - Nog geen slang.
-- Level 2, `Snake Sands`:
-  - De woestijn wordt drukker en gevaarlijker.
-  - Slang komt erbij en klapt dichtbij verder uit.
-  - Meer variatie in timing tussen vogel, cactus en slang.
-- Level 3, `High Jump Ridge`:
-  - Verticale obstakels worden belangrijker.
-  - Torencactus komt erbij.
-  - Ook een jump block: spring er van onderen tegenaan en er vallen waterdruppels uit.
-  - De grond wordt dan nat en er groeien bloemetjes uit de grond.
-  - High-jump waarschuwing wordt relevant voor grotere obstakels.
-- Level 4, `Bird Boss Canyon`:
-  - Eerste minibossfase.
-  - Reuzenvogel verschijnt.
-  - Boss fight met energiemeter van 20 stappen.
-  - Boss verslaan vereist 15 hits.
-- Level 5, `Fly away`:
-  - Eerste vliegtuighoofdstuk.
-  - Pijpen verschijnen als normale levelobstakels, ook zonder vliegtuig.
-  - Vliegtuig verschijnt als optionele pickup.
-  - Bij landing op het vliegtuig start flight mode.
-- Level 6, `Storm Track`:
-  - Tweede vliegtuighoofdstuk.
-  - Pijpen blijven actief als normale levelobstakels.
-  - Vliegtuig kan opnieuw als pickup verschijnen.
-  - Flight mode loopt door over level 5 en 6.
-- Level 7, `Cactus Fortress`:
-  - Tweede minibossfase.
-  - De speler stapt uit flight mode en gaat terug naar grondgevecht.
-  - Reuzencactus verschijnt.
-  - Boss fight met energiemeter van 25 stappen.
-  - De cactus heeft 5 takken met elk 5 hits; totaal 25 hits nodig.
-- Level 8, `Wild Flats`:
-  - Snellere combinatie van grond- en luchtgevaar.
-  - Ook meerdere cactussen tegelijk in krappe packs, vaak twee direct na elkaar en soms drie.
-  - Sommige sprongen vragen snelle landing: gebruik dan ook `Pijl omlaag` om op tijd klaar te zijn voor de volgende jump.
-  - Verdere opschaling van tempo, variatie en reactiedruk.
-- Level 9, `Last Stretch`:
-  - Voorbereiding op de eindbaas.
-  - Hogere druk door snellere spawnmix, multi-cactus packs en minder hersteltijd tussen obstakels.
-- Level 10, `Giant Town`:
-  - Eindbaasfase.
-  - Eindbaas is een reuzenvariant per karakter:
-    - Dino: ReuzenDino.
-    - Cowboy: ReuzenCowboy.
-    - Roadrunner: ReuzenCoyote.
-  - Boss gebruikt hetzelfde projectieltype als de speler.
-  - Boss verslaan vereist 35 hits, energiemeter van 35 stappen.
+De uitgebreide beschrijving van levels, boss-entrances, powerups en ontwerpprincipes staat nu in [sgb.md](sgb.md).
 
 ### Overzichtskaart en levelkeuze
 
@@ -127,7 +55,7 @@ Deze game is een variant op de Chrome Dino game, met meerdere speelbare karakter
 
 ### Boss- en wapenregels
 
-- Tijdens boss fights schiet de speler met `SPACE`.
+- Tijdens boss fights schiet de speler met `SPACE`, behalve in de coyote-fight waar grote bommen teruggegooid worden.
 - Character-specifiek wapen:
   - Cowboy: `Gun` (zwart).
   - Roadrunner: `TNT` (rood).

@@ -48,6 +48,7 @@ Deze codebase gebruikt een eigen Python Processing-implementatie. Controleer alt
 
 - `api.md`
 - `processing/`
+- `sgb.md` voor gameplaysystems, levels, powerups en ontwerpprincipes
 
 Ga niet uit van Java Processing-functies die niet in deze repo bestaan.
 
