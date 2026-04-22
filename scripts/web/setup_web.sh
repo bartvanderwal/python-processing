@@ -12,7 +12,7 @@ if [ ! -d "$VENV_DIR" ]; then
 fi
 
 "$VENV_DIR/bin/python" -m pip install --upgrade pip
-"$VENV_DIR/bin/python" -m pip install -r "$ROOT_DIR/requirements.txt" pygbag
+"$VENV_DIR/bin/python" -m pip install -r "$ROOT_DIR/requirements.txt" pygbag certifi
 
 echo "[web-setup] Done."
 echo "[web-setup] Next: scripts/web/build_web.sh"

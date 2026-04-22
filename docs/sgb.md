@@ -20,6 +20,9 @@ De game gebruikt dezelfde visuele taal op meerdere plekken.
 - Shop-items mogen dus niet ineens als totaal andere UI-componenten verschijnen als ze al als iconen in HUD of shop bestaan.
 - Informatie met gameplay-impact moet leesbaar zijn in de wereld zelf, niet alleen als tekst erboven.
 - Gevaar krijgt altijd een visuele cue: bijvoorbeeld een landingsgloed onder een vallende bom, of een arena die oplicht bij explosies.
+- Level-flow is leerbaar: obstaclevolgordes zijn in basis scripted/hardcoded per level, zodat spelers patronen kunnen herkennen en verbeteren.
+- Variatie mag alleen gecontroleerd: vanaf hogere levels uitsluitend via een kleine, vooraf ontworpen set veilige patroonblokken.
+- Onmogelijke combinaties zijn verboden: runtime mag geen obstacleketens genereren die niet haalbaar zijn met normale timing/spronghoogte wanneer een powerup net is afgelopen.
 
 ![Cowboy dead](cowboy-dead.png)
 
@@ -93,6 +96,14 @@ Voor elk boss level stopt de endless-runner-flow kort in een statische hubscene.
   - miniboss `1`: `15` punten;
   - miniboss `2`: `15` punten;
   - eindbaas: `35` punten.
+
+### Obstakelgeneratiebeleid
+
+- Levels `1` t/m `7` zijn primair leerbaar en gebruiken vaste obstaclepatronen.
+- Vanaf level `8` is beperkte variatie toegestaan, maar alleen met curated templates (geen vrije RNG-combinatie van losse obstakels).
+- Elke template voor level `8+` moet handmatig speelbaar gevalideerd zijn.
+- Validatieregel: ook als een high-jump powerup leeg is, moet de speler met normale sprong een uitwijkroute of haalbare timing houden.
+- Templates die directe "soft-lock" situaties kunnen veroorzaken (zoals te krappe multi-cactusketens zonder herstelmoment) zijn niet toegestaan.
 
 ### Aantal obstacles per level
 

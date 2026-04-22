@@ -2,10 +2,27 @@ from processing import run, size, full_screen, frame_rate, title, background, fi
 from processing import image, text_size, text, load_image, no_fill, stroke, stroke_weight, no_stroke, millis
 from processing import width, height, key, key_code, random
 from processing import PI, TWO_PI
-import pygame
+
+from processing_extension import (
+    K_DOWN,
+    K_ESCAPE,
+    K_LEFT,
+    K_RIGHT,
+    K_UP,
+    K_c,
+    display as pg_display,
+    font as pg_font,
+    get_init as pygame_get_init,
+    image as pg_image,
+    key as pg_key,
+    mixer,
+    pygame,
+    transform,
+)
 import shared
 import math
 import os
+import sys
 
 # Dino game assets
 DINO_IMG = load_image("assets/dino-transparant.png")
@@ -126,10 +143,10 @@ def get_plane_frames_for_character(character_key):
     return PLANE_SPRITE_ROWS[first_row]
 
 # Richtingsvarianten (naar rechts kijken) voor specifieke enemies/bosses.
-BIRD_RIGHT_IMG = pygame.transform.flip(BIRD_IMG, True, False)
-GIANT_DINO_RIGHT_IMG = pygame.transform.flip(DINO_IMG, True, False)
-GIANT_COWBOY_RIGHT_IMG = pygame.transform.flip(COWBOY_IMG, True, False)
-GIANT_COWBOY_DUCK_RIGHT_IMG = pygame.transform.flip(COWBOY_DUCK_IMG, True, False)
+BIRD_RIGHT_IMG = transform.flip(BIRD_IMG, True, False)
+GIANT_DINO_RIGHT_IMG = transform.flip(DINO_IMG, True, False)
+GIANT_COWBOY_RIGHT_IMG = transform.flip(COWBOY_IMG, True, False)
+GIANT_COWBOY_DUCK_RIGHT_IMG = transform.flip(COWBOY_DUCK_IMG, True, False)
 
 # Dino properties
 BASE_GAME_WIDTH = 800
@@ -303,6 +320,12 @@ CREDITS_SCROLL_SPEED_FACTOR = 0.82
 CREDITS_FINISH_PAD_PX = 120
 SCREENSHOT_NOTICE_MS = 2200
 GROUND_Y = 460
+IS_WEB = sys.platform == "emscripten"
+TOUCH_CONTROLS_ENABLED = IS_WEB
+TOUCH_BTN_SIZE = 78
+TOUCH_BTN_GAP = 12
+TOUCH_ACTION_BTN_W = 132
+TOUCH_ACTION_BTN_H = 78
 
 # Progression per level: first chapter = 6 cleared obstacles, then +3 obstacles each chapter.
 LEVEL_OBSTACLE_REQUIREMENTS = [6, 9, 12, 15, 18, 21, 24, 27, 30, 33]
@@ -330,6 +353,52 @@ LEVEL_NAMES = {
     8: "Wild Flats",
     9: "Last Stretch",
     10: "Giant Town",
+}
+
+USE_SCRIPTED_OBSTACLE_PATTERNS = True
+LEVEL_SCRIPTED_OBSTACLE_PATTERNS = {
+    1: [
+        "cactus_low", "cactus_low", "bird_low", "cactus_high",
+        "cactus_low", "bird_low", "cactus_high", "cactus_low",
+    ],
+    2: [
+        "cactus_low", "snake", "bird_low", "cactus_high",
+        "snake", "cactus_low", "bird_low", "cactus_high",
+    ],
+    3: [
+        "jump_block", "cactus_tower", "snake", "cactus_low",
+        "jump_block", "bird_low", "cactus_tower", "snake",
+    ],
+    4: [
+        "cactus_low", "bird_low", "snake", "cactus_high",
+        "cactus_low", "bird_low", "snake", "cactus_high",
+    ],
+    5: [
+        "pipe_pair", "cactus_low", "pipe_pair", "snake",
+        "pipe_pair", "bird_low", "pipe_pair", "cactus_high",
+    ],
+    6: [
+        "pipe_pair", "snake", "pipe_pair", "cactus_high",
+        "pipe_pair", "bird_low", "pipe_pair", "cactus_low",
+    ],
+    7: [
+        "cactus_tower", "snake", "bird_low", "cactus_high",
+        "cactus_low", "snake", "bird_low", "cactus_tower",
+    ],
+    8: [
+        "cactus_low", "snake", "cactus_high", "bird_low",
+        "cactus_low", "cactus_tower", "snake", "bird_low",
+        "cactus_high", "cactus_low",
+    ],
+    9: [
+        "cactus_low", "snake", "cactus_high", "bird_low",
+        "cactus_low", "snake", "cactus_tower", "bird_low",
+        "cactus_low", "snake", "cactus_high", "cactus_low",
+    ],
+    10: [
+        "cactus_high", "snake", "bird_low", "cactus_tower",
+        "cactus_low", "snake", "bird_low", "cactus_high",
+    ],
 }
 
 # Collision hitbox tuning (smaller than visual sprite for fair gameplay)
@@ -595,6 +664,8 @@ queued_spawn_sequence = []
 queued_coin_spawn_ys = []
 bonus_coins = []
 extra_obstacles = []
+scripted_obstacle_level = 1
+scripted_obstacle_index = 0
 jump_block_droplets = []
 ground_flowers = []
 high_jump_powerup_charges = 0
@@ -653,6 +724,9 @@ credits_font_cache = {}
 pending_credits_after_victory = False
 mini_boss_defeat_sequences = []
 is_fullscreen = False
+touch_active_button = None
+touch_ignore_next_click = False
+web_audio_unlocked = not IS_WEB
 
 
 def reset_game(show_splash=False):
@@ -673,6 +747,7 @@ def reset_game(show_splash=False):
     global pending_airplane_spawn, queued_obstacle_after_powerup
     global queued_spawn_sequence, queued_coin_spawn_ys, bonus_coins
     global extra_obstacles
+    global scripted_obstacle_level, scripted_obstacle_index
     global jump_block_droplets, ground_flowers
     global high_jump_powerup_charges
     global pending_weapon_powerup_level, weapon_powerup_ready, weapon_powerup_level
@@ -695,6 +770,7 @@ def reset_game(show_splash=False):
     global credits_total_duration_ms, credits_starfield
     global pending_credits_after_victory
     global mini_boss_defeat_sequences
+    global touch_active_button, touch_ignore_next_click
     stop_intro_speech()
     dino_y = DINO_Y
     velocity_y = 0
@@ -741,6 +817,8 @@ def reset_game(show_splash=False):
     queued_coin_spawn_ys = []
     bonus_coins = []
     extra_obstacles = []
+    scripted_obstacle_level = 1
+    scripted_obstacle_index = 0
     jump_block_droplets = []
     ground_flowers = []
     high_jump_powerup_charges = 0
@@ -798,6 +876,8 @@ def reset_game(show_splash=False):
     credits_starfield = []
     pending_credits_after_victory = False
     mini_boss_defeat_sequences = []
+    touch_active_button = None
+    touch_ignore_next_click = False
     spawn_obstacle("cactus_low")
 
 
@@ -838,13 +918,15 @@ def update_player_vertical_motion():
 
 def update_background_music(force=False):
     global current_music_mode
-    if not pygame.mixer.get_init():
+    if IS_WEB and not web_audio_unlocked:
+        return
+    if not mixer.get_init():
         return
 
     if not shared.music_enabled:
         if current_music_mode is not None:
             try:
-                pygame.mixer.music.stop()
+                mixer.music.stop()
             except Exception:
                 pass
             current_music_mode = None
@@ -870,13 +952,24 @@ def update_background_music(force=False):
     else:
         target_path = GAME_MUSIC_PATH
     try:
-        pygame.mixer.music.load(target_path)
-        pygame.mixer.music.set_volume(MUSIC_VOLUME)
-        pygame.mixer.music.play(-1)
+        mixer.music.load(target_path)
+        mixer.music.set_volume(MUSIC_VOLUME)
+        mixer.music.play(-1)
         current_music_mode = target_mode
     except Exception:
         # Keep the game running even when a track cannot be loaded.
         current_music_mode = None
+
+
+def unlock_web_audio_if_needed():
+    global web_audio_unlocked
+    if not IS_WEB:
+        return
+    if web_audio_unlocked:
+        return
+    web_audio_unlocked = True
+    # Start or resume background music only after user interaction in the browser.
+    update_background_music(force=True)
 
 
 def get_credits_font(size, mono=False, bold=False):
@@ -885,7 +978,7 @@ def get_credits_font(size, mono=False, bold=False):
     if cached is not None:
         return cached
     family = "Courier New" if mono else "Arial Black"
-    font = pygame.font.SysFont(family, int(size), bold=bool(bold))
+    font = pg_font.SysFont(family, int(size), bold=bool(bold))
     credits_font_cache[key] = font
     return font
 
@@ -939,13 +1032,13 @@ def build_credits_items():
     add_text("Thanks to Codex GPT-5.3", 28, (255, 238, 152), spacing=44)
     add_text("https://toolkit.artlist.io/ for the epic over-the-top finale music...", 23, (255, 238, 152), spacing=48)
     try:
-        macbook_raw = pygame.image.load("assets/macbook.png").convert_alpha()
+        macbook_raw = pg_image.load("assets/macbook.png").convert_alpha()
         max_w = 250
         max_h = 150
         scale = min(max_w / max(1, macbook_raw.get_width()), max_h / max(1, macbook_raw.get_height()))
         target_w = max(24, int(macbook_raw.get_width() * scale))
         target_h = max(24, int(macbook_raw.get_height() * scale))
-        macbook_scaled = pygame.transform.smoothscale(macbook_raw, (target_w, target_h))
+        macbook_scaled = transform.smoothscale(macbook_raw, (target_w, target_h))
         items.append({
             "kind": "image",
             "surface": macbook_scaled,
@@ -965,7 +1058,7 @@ def build_credits_items():
 
     for full_path, rel_path, file_name in image_sources:
         try:
-            raw = pygame.image.load(full_path).convert_alpha()
+            raw = pg_image.load(full_path).convert_alpha()
         except Exception:
             continue
         max_w = 250
@@ -973,7 +1066,7 @@ def build_credits_items():
         scale = min(max_w / max(1, raw.get_width()), max_h / max(1, raw.get_height()))
         target_w = max(24, int(raw.get_width() * scale))
         target_h = max(24, int(raw.get_height() * scale))
-        scaled = pygame.transform.smoothscale(raw, (target_w, target_h))
+        scaled = transform.smoothscale(raw, (target_w, target_h))
         items.append({
             "kind": "image",
             "surface": scaled,
@@ -1054,7 +1147,7 @@ def draw_credits_screen():
     start_y = height + CREDITS_BOTTOM_MARGIN
     scroll_offset = start_y - (elapsed_for_scroll * credits_scroll_speed_px_per_ms)
 
-    surface = pygame.display.get_surface()
+    surface = pg_display.get_surface()
     if surface is None:
         return
 
@@ -1083,7 +1176,7 @@ def draw_credits_screen():
             scale = 0.42 + (0.58 * perspective_t)
             target_w = max(1, int(rendered.get_width() * scale))
             target_h = max(1, int(rendered.get_height() * scale))
-            sprite = pygame.transform.smoothscale(rendered, (target_w, target_h))
+            sprite = transform.smoothscale(rendered, (target_w, target_h))
             surface.blit(sprite, (int(center_x - (target_w / 2)), int(draw_y)))
             continue
 
@@ -1093,7 +1186,7 @@ def draw_credits_screen():
             scale = 0.48 + (0.52 * perspective_t)
             img_w = max(18, int(base.get_width() * scale))
             img_h = max(18, int(base.get_height() * scale))
-            sprite = pygame.transform.smoothscale(base, (img_w, img_h))
+            sprite = transform.smoothscale(base, (img_w, img_h))
             img_x = int(center_x - (img_w / 2))
             surface.blit(sprite, (img_x, int(draw_y)))
 
@@ -1121,7 +1214,7 @@ def draw_credits_screen():
 
 def capture_screenshot():
     global screenshot_notice_until_ms, screenshot_notice_text
-    surface = pygame.display.get_surface()
+    surface = pg_display.get_surface()
     if surface is None:
         screenshot_notice_text = "Screenshot failed (no active surface)"
         screenshot_notice_until_ms = millis() + SCREENSHOT_NOTICE_MS
@@ -1131,7 +1224,7 @@ def capture_screenshot():
     filename = f"level-{current_level:02d}-score-{int(score):03d}-{stamp}.png"
     path = os.path.join("assets", "screenshots", filename)
     try:
-        pygame.image.save(surface, path)
+        pg_image.save(surface, path)
     except Exception:
         screenshot_notice_text = "Screenshot failed (save error)"
         screenshot_notice_until_ms = millis() + SCREENSHOT_NOTICE_MS
@@ -1202,58 +1295,58 @@ def setup():
     reset_game(show_splash=True)
 
     try:
-        if not pygame.mixer.get_init():
-            pygame.mixer.init()
+        if not mixer.get_init():
+            mixer.init()
     except Exception:
         return
 
     try:
-        JUMP_SOUND = pygame.mixer.Sound("assets/audio/jump.wav")
+        JUMP_SOUND = mixer.Sound("assets/audio/jump.wav")
     except Exception:
         JUMP_SOUND = None
 
     try:
-        ROADRUNNER_JUMP_SOUND = pygame.mixer.Sound("assets/audio/weeh.wav")
+        ROADRUNNER_JUMP_SOUND = mixer.Sound("assets/audio/weeh.wav")
     except Exception:
         ROADRUNNER_JUMP_SOUND = None
 
     try:
-        CRASH_SOUND = pygame.mixer.Sound("assets/audio/crash.wav")
+        CRASH_SOUND = mixer.Sound("assets/audio/crash.wav")
     except Exception:
         CRASH_SOUND = None
 
     try:
-        HISS_SOUND = pygame.mixer.Sound("assets/audio/hiss.wav")
+        HISS_SOUND = mixer.Sound("assets/audio/hiss.wav")
     except Exception:
         HISS_SOUND = None
 
     try:
-        SPLASH_SOUND = pygame.mixer.Sound("assets/audio/splash.wav")
+        SPLASH_SOUND = mixer.Sound("assets/audio/splash.wav")
     except Exception:
         SPLASH_SOUND = None
 
     try:
-        FIRE_PLAYER_SOUND = pygame.mixer.Sound("assets/audio/fire-player.wav")
+        FIRE_PLAYER_SOUND = mixer.Sound("assets/audio/fire-player.wav")
     except Exception:
         FIRE_PLAYER_SOUND = None
 
     try:
-        FIRE_ENEMY_SOUND = pygame.mixer.Sound("assets/audio/fire-enemy.wav")
+        FIRE_ENEMY_SOUND = mixer.Sound("assets/audio/fire-enemy.wav")
     except Exception:
         FIRE_ENEMY_SOUND = None
 
     try:
-        BOSS_EXPLOSION_SOUND = pygame.mixer.Sound("assets/audio/boss-explosion.wav")
+        BOSS_EXPLOSION_SOUND = mixer.Sound("assets/audio/boss-explosion.wav")
     except Exception:
         BOSS_EXPLOSION_SOUND = None
 
     try:
-        COIN_SOUND = pygame.mixer.Sound("assets/audio/ping.wav")
+        COIN_SOUND = mixer.Sound("assets/audio/ping.wav")
     except Exception:
         COIN_SOUND = None
 
     try:
-        MINI_BOSS_VICTORY_SOUND = pygame.mixer.Sound("assets/audio/victory.wav")
+        MINI_BOSS_VICTORY_SOUND = mixer.Sound("assets/audio/victory.wav")
     except Exception:
         MINI_BOSS_VICTORY_SOUND = COIN_SOUND
 
@@ -1262,7 +1355,7 @@ def setup():
         if not os.path.exists(speech_path):
             continue
         try:
-            INTRO_SPEECH_SOUND = pygame.mixer.Sound(speech_path)
+            INTRO_SPEECH_SOUND = mixer.Sound(speech_path)
             break
         except Exception:
             INTRO_SPEECH_SOUND = None
@@ -1316,70 +1409,73 @@ def choose_obstacle_type():
         queued_obstacle_after_powerup = None
         return queued_type
 
-    chosen = "cactus_low"
-
-    # Level 1: nog geen slang.
-    if current_level < 2:
-        roll = int(random(0, 100))
-        if roll < 52:
-            chosen = "cactus_low"
-        elif roll < 84:
-            chosen = "cactus_high"
-        else:
-            chosen = "bird_low"
-
-    # Level 2: slang komt erbij.
-    elif current_level < 3:
-        roll = int(random(0, 100))
-        if roll < 36:
-            chosen = "cactus_low"
-        elif roll < 66:
-            chosen = "cactus_high"
-        elif roll < 84:
-            chosen = "snake"
-        else:
-            chosen = "bird_low"
-
-    elif current_level < 4:
-        roll = int(random(0, 100))
-        if roll < 16:
-            chosen = "cactus_low"
-        elif roll < 30:
-            chosen = "cactus_high"
-        elif roll < 52:
-            chosen = "jump_block"
-        elif roll < 66:
-            chosen = "cactus_tower"
-        elif roll < 92:
-            chosen = "snake"
-        else:
-            chosen = "bird_low"
-
+    if USE_SCRIPTED_OBSTACLE_PATTERNS:
+        chosen = get_next_scripted_obstacle_type()
     else:
-        roll = int(random(0, 100))
-        if current_level in (5, 6):
-            # Pipe chapters: pipes are normal obstacles, airplane is optional pickup.
-            if roll < 44:
-                chosen = "pipe_pair"
-            elif roll < 64:
+        chosen = "cactus_low"
+
+        # Level 1: nog geen slang.
+        if current_level < 2:
+            roll = int(random(0, 100))
+            if roll < 52:
                 chosen = "cactus_low"
-            elif roll < 76:
+            elif roll < 84:
                 chosen = "cactus_high"
-            elif roll < 86:
+            else:
+                chosen = "bird_low"
+
+        # Level 2: slang komt erbij.
+        elif current_level < 3:
+            roll = int(random(0, 100))
+            if roll < 36:
+                chosen = "cactus_low"
+            elif roll < 66:
+                chosen = "cactus_high"
+            elif roll < 84:
                 chosen = "snake"
             else:
                 chosen = "bird_low"
-        else:
-            if roll < 35:
+
+        elif current_level < 4:
+            roll = int(random(0, 100))
+            if roll < 16:
                 chosen = "cactus_low"
-            elif roll < 58:
+            elif roll < 30:
                 chosen = "cactus_high"
-            elif roll < 68:
+            elif roll < 52:
+                chosen = "jump_block"
+            elif roll < 66:
                 chosen = "cactus_tower"
-            elif roll < 82:
+            elif roll < 92:
                 chosen = "snake"
             else:
                 chosen = "bird_low"
+
+        else:
+            roll = int(random(0, 100))
+            if current_level in (5, 6):
+                # Pipe chapters: pipes are normal obstacles, airplane is optional pickup.
+                if roll < 44:
+                    chosen = "pipe_pair"
+                elif roll < 64:
+                    chosen = "cactus_low"
+                elif roll < 76:
+                    chosen = "cactus_high"
+                elif roll < 86:
+                    chosen = "snake"
+                else:
+                    chosen = "bird_low"
+            else:
+                if roll < 35:
+                    chosen = "cactus_low"
+                elif roll < 58:
+                    chosen = "cactus_high"
+                elif roll < 68:
+                    chosen = "cactus_tower"
+                elif roll < 82:
+                    chosen = "snake"
+                else:
+                    chosen = "bird_low"
 
     # Laat vóór grotere cactussen eerst een High Jump powerup verschijnen.
     if chosen in ("cactus_high", "cactus_tower") and high_jump_powerup_charges <= 0:
@@ -1387,7 +1483,7 @@ def choose_obstacle_type():
         return "high_jump_powerup"
 
     # Muntje kan vóór een normaal obstakel spawnen en gebruikt dezelfde collision flow.
-    if chosen in ("cactus_low", "cactus_high", "cactus_tower", "snake", "bird_low"):
+    if (not USE_SCRIPTED_OBSTACLE_PATTERNS) and chosen in ("cactus_low", "cactus_high", "cactus_tower", "snake", "bird_low"):
         if int(random(0, 100)) < COIN_SPAWN_CHANCE_PCT:
             if int(random(0, 100)) < COIN_ARC_SPAWN_CHANCE_PCT:
                 queued_coin_spawn_ys.extend(get_coin_arc_spawn_ys(chosen))
@@ -1498,6 +1594,8 @@ def maybe_spawn_bonus_coin_pattern(base_type, base_x):
 
 def maybe_spawn_extra_obstacle_pack(base_type, base_x):
     global extra_obstacles, multi_jump_notice_until_ms
+    if USE_SCRIPTED_OBSTACLE_PATTERNS:
+        return
     if current_level < 8:
         return
     if base_type not in ("cactus_low", "cactus_high", "cactus_tower"):
@@ -1740,6 +1838,27 @@ def get_level_for_obstacle_count(current_obstacle_count):
     return MAX_LEVEL
 
 
+def reset_scripted_obstacle_sequence(level=None):
+    global scripted_obstacle_level, scripted_obstacle_index
+    target_level = current_level if level is None else level
+    scripted_obstacle_level = max(1, min(MAX_LEVEL, int(target_level)))
+    scripted_obstacle_index = 0
+
+
+def get_next_scripted_obstacle_type():
+    global scripted_obstacle_level, scripted_obstacle_index
+    if scripted_obstacle_level != current_level:
+        reset_scripted_obstacle_sequence(current_level)
+
+    pattern = LEVEL_SCRIPTED_OBSTACLE_PATTERNS.get(current_level)
+    if not pattern:
+        return "cactus_low"
+
+    chosen = pattern[scripted_obstacle_index % len(pattern)]
+    scripted_obstacle_index += 1
+    return chosen
+
+
 def save_character_checkpoint(level=None, character_key=None):
     checkpoint_character_key = character_key or active_character_key
     checkpoint_level = current_level if level is None else level
@@ -1751,12 +1870,15 @@ def save_character_checkpoint(level=None, character_key=None):
 
 def restore_character_checkpoint(character_key):
     global current_level, score, scroll_speed, obstacles_cleared, next_level_obstacle_goal
+    global scripted_obstacle_level, scripted_obstacle_index
     checkpoint_level = checkpoint_level_by_character.get(character_key, 1)
     current_level = checkpoint_level
     score = get_level_start_score(checkpoint_level)
     obstacles_cleared = get_level_start_obstacle_count(checkpoint_level)
     scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
     next_level_obstacle_goal = get_level_total_obstacle_count(current_level)
+    scripted_obstacle_level = current_level
+    scripted_obstacle_index = 0
 
 
 def start_game_from_selection():
@@ -2116,9 +2238,12 @@ def apply_player_hit(hit_sound=None):
 
 def update_level_from_progress():
     global current_level, scroll_speed, next_level_obstacle_goal, level_blink_until_ms, pending_airplane_spawn
+    global scripted_obstacle_level, scripted_obstacle_index
     new_level = get_level_for_obstacle_count(obstacles_cleared)
     if new_level > current_level:
         current_level = new_level
+        scripted_obstacle_level = current_level
+        scripted_obstacle_index = 0
         scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
         next_level_obstacle_goal = get_level_total_obstacle_count(current_level)
         level_blink_until_ms = millis() + LEVEL_BLINK_DURATION_MS
@@ -2138,6 +2263,7 @@ def register_cleared_obstacle(amount=1):
 
 def debug_step_level(level_delta):
     global current_level, score, scroll_speed, obstacles_cleared, next_level_obstacle_goal, level_blink_until_ms, pending_airplane_spawn
+    global scripted_obstacle_level, scripted_obstacle_index
     old_level = current_level
     target_level = max(1, min(MAX_LEVEL, current_level + level_delta))
     if target_level == old_level:
@@ -2147,6 +2273,8 @@ def debug_step_level(level_delta):
     score = get_level_start_score(target_level)
     obstacles_cleared = get_level_start_obstacle_count(target_level)
     current_level = target_level
+    scripted_obstacle_level = current_level
+    scripted_obstacle_index = 0
     scroll_speed = BASE_SCROLL_SPEED * (LEVEL_SPEED_FACTOR ** (current_level - 1))
     next_level_obstacle_goal = get_level_total_obstacle_count(current_level)
     level_blink_until_ms = millis() + LEVEL_BLINK_DURATION_MS
@@ -2313,7 +2441,7 @@ def spawn_final_boss_explosion_burst(boss_snapshot, count=FINAL_BOSS_DEFEAT_BURS
 def draw_explosion_effects():
     if not explosion_effects:
         return
-    surface = pygame.display.get_surface()
+    surface = pg_display.get_surface()
     if surface is None or not EXPLOSION_FRAMES:
         return
     frame_count = len(EXPLOSION_FRAMES)
@@ -2333,7 +2461,7 @@ def draw_explosion_effects():
             continue
 
         size_now = int(max(16, effect["size"] * (0.86 + (0.30 * progress))))
-        sprite = pygame.transform.smoothscale(frame, (size_now, size_now)).copy()
+        sprite = transform.smoothscale(frame, (size_now, size_now)).copy()
         alpha_now = int(effect["alpha"] * (1.0 - progress))
         sprite.set_alpha(max(0, min(255, alpha_now)))
         draw_x = int(effect["x"] - (size_now / 2))
@@ -3495,13 +3623,13 @@ def get_announcement_font(size):
     font = announcement_font_cache.get(key)
     if font is not None:
         return font
-    font = pygame.font.SysFont("Arial Black", key, bold=True)
+    font = pg_font.SysFont("Arial Black", key, bold=True)
     announcement_font_cache[key] = font
     return font
 
 
 def draw_transparent_blink_text(message, y, base_size=96, base_color=(255, 74, 56)):
-    surface = pygame.display.get_surface()
+    surface = pg_display.get_surface()
     if surface is None:
         return
     lines = str(message).split("\n")
@@ -4197,8 +4325,8 @@ def draw():
     if score > high_score:
         high_score = int(score)
 
-    keys_pressed = pygame.key.get_pressed() if pygame.get_init() else None
-    coin_key_held = bool(keys_pressed and keys_pressed[pygame.K_c])
+    keys_pressed = pg_key.get_pressed() if pygame_get_init() else None
+    coin_key_held = bool(keys_pressed and keys_pressed[K_c])
 
     if (
         (debug_coin_pressed or coin_key_held)
@@ -4271,6 +4399,7 @@ def draw():
             fill(*theme["text"])
             text_size(28)
             text("Wanna quit, really? y/n", width // 2 - 168, height // 2 + 186)
+        draw_touch_controls_overlay()
         draw_debug_overlay()
         return
 
@@ -4297,6 +4426,7 @@ def draw():
         text_size(22)
         text("Final boss defeated. Press Q for start screen", width // 2 - 208, height // 2 + 26)
         draw_hud(theme, force_visible=True)
+        draw_touch_controls_overlay()
         draw_debug_overlay()
         return
 
@@ -4305,6 +4435,7 @@ def draw():
         if not flight_mode:
             draw_main_character()
             draw_hud(theme)
+            draw_touch_controls_overlay()
             draw_debug_overlay()
             return
         draw_main_character()
@@ -4315,6 +4446,7 @@ def draw():
             text_size(18)
             text("Press P to continue", width // 2 - 96, height // 2 + 22)
             draw_hud(theme)
+            draw_touch_controls_overlay()
             draw_debug_overlay()
             return
         if game_over:
@@ -4326,9 +4458,11 @@ def draw():
             text_size(22)
             text(f"Speed: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 195, 72)
             text("Press SPACE for start screen", width // 2 - 165, height // 2 + 40)
+            draw_touch_controls_overlay()
             draw_debug_overlay()
             return
         draw_hud(theme)
+        draw_touch_controls_overlay()
         draw_debug_overlay()
         return
 
@@ -4336,6 +4470,7 @@ def draw():
         draw_main_character()
         draw_shop_screen(theme)
         draw_hud(theme, force_visible=True)
+        draw_touch_controls_overlay()
         draw_debug_overlay()
         return
 
@@ -4356,6 +4491,7 @@ def draw():
             text_size(18)
             text("Press P to continue", width // 2 - 96, height // 2 + 22)
         draw_hud(theme, force_visible=True)
+        draw_touch_controls_overlay()
         draw_debug_overlay()
         return
 
@@ -4370,6 +4506,7 @@ def draw():
             text_size(18)
             text("Press P to continue", width // 2 - 96, height // 2 + 22)
             draw_hud(theme)
+            draw_touch_controls_overlay()
             draw_debug_overlay()
             return
         if game_over:
@@ -4381,9 +4518,11 @@ def draw():
             text_size(22)
             text(f"Speed: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 195, 72)
             text("Press SPACE for start screen", width // 2 - 165, height // 2 + 40)
+            draw_touch_controls_overlay()
             draw_debug_overlay()
             return
         draw_hud(theme)
+        draw_touch_controls_overlay()
         draw_debug_overlay()
         return
 
@@ -4415,6 +4554,7 @@ def draw():
         text_size(18)
         text("Press P to continue", width // 2 - 96, height // 2 + 22)
         draw_hud(theme)
+        draw_touch_controls_overlay()
         draw_debug_overlay()
         return
 
@@ -4493,6 +4633,7 @@ def draw():
                 start_flight_mode()
                 draw_main_character()
                 draw_hud(theme)
+                draw_touch_controls_overlay()
                 return
 
         if obstacle_type == "jump_block":
@@ -4519,6 +4660,7 @@ def draw():
                 spawn_obstacle()
                 draw_main_character()
                 draw_hud(theme)
+                draw_touch_controls_overlay()
                 return
 
         # Collision detection
@@ -4592,6 +4734,7 @@ def draw():
         text_size(22)
         text(f"Speed: x{round(scroll_speed / BASE_SCROLL_SPEED, 2)}", width - 195, 72)
         text("Press SPACE for start screen", width // 2 - 165, height // 2 + 40)
+        draw_touch_controls_overlay()
         draw_debug_overlay()
         if millis() < screenshot_notice_until_ms:
             fill(30, 110, 30)
@@ -4600,11 +4743,205 @@ def draw():
         return
 
     draw_hud(theme)
+    draw_touch_controls_overlay()
     draw_debug_overlay()
     if millis() < screenshot_notice_until_ms:
         fill(30, 110, 30)
         text_size(14)
         text(screenshot_notice_text, 20, height - 20)
+
+
+def perform_jump_if_possible():
+    global velocity_y, on_ground, is_ducking, is_fast_falling
+    global duck_jump_expires_ms, high_jump_powerup_charges
+    if not (game_started and not game_over and on_ground):
+        return False
+    # Buk-spring binnen half seconde geeft high jump.
+    now = millis()
+    used_duck_window = now <= duck_jump_expires_ms
+    jump_velocity = JUMP_VELOCITY
+    if high_jump_powerup_charges > 0:
+        jump_velocity = STACKED_POWER_HIGH_JUMP_VELOCITY if used_duck_window else POWERUP_HIGH_JUMP_VELOCITY
+        high_jump_powerup_charges = max(0, high_jump_powerup_charges - 1)
+    elif used_duck_window:
+        jump_velocity = HIGH_JUMP_VELOCITY
+    if is_jump_shoes_active():
+        jump_velocity *= SHOP_JUMP_SHOES_FACTOR
+    is_ducking = False
+    velocity_y = jump_velocity
+    on_ground = False
+    is_fast_falling = False
+    duck_jump_expires_ms = 0
+    play_sfx(get_jump_sound())
+    return True
+
+
+def should_show_touch_controls():
+    if not TOUCH_CONTROLS_ENABLED:
+        return False
+    if credits_active or shared.show_info or shop_active:
+        return False
+    return True
+
+
+def get_touch_controls_layout():
+    side = max(56, min(TOUCH_BTN_SIZE, int(min(width, height) * 0.14)))
+    gap = max(8, min(TOUCH_BTN_GAP, int(side * 0.18)))
+    pad = 14
+
+    left_x = pad
+    right_x = left_x + side + gap
+    down_y = height - side - pad
+    up_y = down_y - side - gap
+
+    action_w = max(108, min(TOUCH_ACTION_BTN_W, int(side * 1.8)))
+    action_h = side
+    action_x = width - action_w - pad
+    action_y = height - action_h - pad
+
+    return {
+        "left": (left_x, down_y, side, side),
+        "right": (right_x, down_y, side, side),
+        "up": (right_x, up_y, side, side),
+        "down": (left_x, up_y, side, side),
+        "action": (action_x, action_y, action_w, action_h),
+    }
+
+
+def draw_touch_controls_overlay():
+    if not should_show_touch_controls():
+        return
+    buttons = get_touch_controls_layout()
+    labels = {
+        "left": "<",
+        "right": ">",
+        "up": "^",
+        "down": "v",
+        "action": "SPACE",
+    }
+    for name, (bx, by, bw, bh) in buttons.items():
+        is_pressed = (touch_active_button == name)
+        if is_pressed:
+            fill(244, 208, 88)
+        else:
+            fill(206, 214, 226)
+        rect(int(bx), int(by), int(bw), int(bh))
+        fill(22, 28, 42)
+        text_size(18 if name != "action" else 20)
+        tx = int(bx + (bw * 0.32))
+        ty = int(by + (bh * 0.62))
+        if name == "action":
+            tx = int(bx + 18)
+        text(labels[name], tx, ty)
+
+
+def press_touch_control(name):
+    global touch_active_button
+    global selected_character_idx, game_started
+    global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
+    global boss_left_pressed, boss_right_pressed
+    global is_ducking, duck_jump_expires_ms, is_fast_falling
+
+    touch_active_button = name
+
+    if name == "left":
+        if not game_started:
+            selected_character_idx = (selected_character_idx - 1) % len(CHARACTER_ORDER)
+            return True
+        if game_started and not game_over and (boss_state is not None or pre_boss_scene_level > 0):
+            boss_left_pressed = True
+        if game_started and flight_mode and not game_over:
+            fly_left_pressed = True
+        return True
+
+    if name == "right":
+        if not game_started:
+            selected_character_idx = (selected_character_idx + 1) % len(CHARACTER_ORDER)
+            return True
+        if game_started and not game_over and (boss_state is not None or pre_boss_scene_level > 0):
+            boss_right_pressed = True
+        if game_started and flight_mode and not game_over:
+            fly_right_pressed = True
+        return True
+
+    if name == "up":
+        if game_started and flight_mode and not game_over:
+            fly_up_pressed = True
+            return True
+        if game_started and not game_over and not game_paused:
+            perform_jump_if_possible()
+        return True
+
+    if name == "down":
+        if game_started and flight_mode and not game_over:
+            fly_down_pressed = True
+            return True
+        if game_started and pre_boss_scene_level > 0 and not game_over:
+            try_interact_pre_boss_scene()
+        if game_started and not game_over and not game_paused:
+            if on_ground:
+                is_ducking = True
+                duck_jump_expires_ms = millis() + HIGH_JUMP_WINDOW_MS
+            else:
+                is_fast_falling = True
+        return True
+
+    if name == "action":
+        if shop_active:
+            return True
+        if game_over:
+            if isDebugMode:
+                save_character_checkpoint()
+            else:
+                save_character_checkpoint(level=1)
+            if active_character_key in CHARACTER_ORDER:
+                selected_character_idx = CHARACTER_ORDER.index(active_character_key)
+            reset_game(show_splash=True)
+            return True
+        if not game_started:
+            start_game_from_selection()
+            return True
+        if game_paused or game_completed or game_over:
+            return True
+        if boss_state is not None:
+            if boss_state.get("form") == "ReuzenCoyote":
+                try_throw_back_coyote_bomb()
+            else:
+                fire_player_weapon()
+        return True
+
+    return False
+
+
+def release_touch_control(name):
+    global touch_active_button
+    global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
+    global boss_left_pressed, boss_right_pressed
+    global is_ducking, duck_jump_expires_ms, is_fast_falling
+    if name == "left":
+        fly_left_pressed = False
+        boss_left_pressed = False
+    elif name == "right":
+        fly_right_pressed = False
+        boss_right_pressed = False
+    elif name == "up":
+        fly_up_pressed = False
+    elif name == "down":
+        fly_down_pressed = False
+        if on_ground:
+            duck_jump_expires_ms = millis() + HIGH_JUMP_WINDOW_MS
+        is_ducking = False
+        is_fast_falling = False
+    touch_active_button = None
+
+
+def try_press_touch_control(x, y, button):
+    if button != 1 or not should_show_touch_controls():
+        return False
+    for name, (bx, by, bw, bh) in get_touch_controls_layout().items():
+        if point_in_rect(x, y, bx, by, bw, bh):
+            return press_touch_control(name)
+    return False
 
 
 def key_pressed():
@@ -4616,6 +4953,7 @@ def key_pressed():
     global boss_left_pressed, boss_right_pressed
     global quit_confirm_active, is_fullscreen, shop_active, coin_count
     global debug_coin_pressed, debug_coin_repeat_until_ms
+    unlock_web_audio_if_needed()
     pressed_key = key.lower() if isinstance(key, str) else key
     if credits_active and pressed_key == "i":
         return
@@ -4645,18 +4983,18 @@ def key_pressed():
             is_fullscreen = True
         return
 
-    if shop_active and (pressed_key == "b" or key_code == pygame.K_ESCAPE):
+    if shop_active and (pressed_key == "b" or key_code == K_ESCAPE):
         close_shop()
         return
 
     if quit_confirm_active:
         if pressed_key == "y":
             exit()
-        if pressed_key in ("n", "q") or key_code == pygame.K_ESCAPE:
+        if pressed_key in ("n", "q") or key_code == K_ESCAPE:
             quit_confirm_active = False
         return
 
-    if pressed_key == "q" or key_code == pygame.K_ESCAPE:
+    if pressed_key == "q" or key_code == K_ESCAPE:
         if game_started:
             if game_over and not isDebugMode:
                 save_character_checkpoint(level=1)
@@ -4733,11 +5071,11 @@ def key_pressed():
         # Avoid accidental skip when player is still hammering shoot during boss defeat.
         return
 
-    if not game_started and key_code == pygame.K_LEFT:
+    if not game_started and key_code == K_LEFT:
         selected_character_idx = (selected_character_idx - 1) % len(CHARACTER_ORDER)
         return
 
-    if not game_started and key_code == pygame.K_RIGHT:
+    if not game_started and key_code == K_RIGHT:
         selected_character_idx = (selected_character_idx + 1) % len(CHARACTER_ORDER)
         return
 
@@ -4751,14 +5089,14 @@ def key_pressed():
         return
 
     if game_started and (boss_state is not None or pre_boss_scene_level > 0) and not game_over:
-        if key_code == pygame.K_LEFT:
+        if key_code == K_LEFT:
             boss_left_pressed = True
             return
-        if key_code == pygame.K_RIGHT:
+        if key_code == K_RIGHT:
             boss_right_pressed = True
             return
 
-    if game_started and pre_boss_scene_level > 0 and not game_over and key_code == pygame.K_DOWN:
+    if game_started and pre_boss_scene_level > 0 and not game_over and key_code == K_DOWN:
         if try_interact_pre_boss_scene():
             return
 
@@ -4770,21 +5108,21 @@ def key_pressed():
         return
 
     if game_started and flight_mode and not game_over:
-        if key_code == pygame.K_LEFT:
+        if key_code == K_LEFT:
             fly_left_pressed = True
             return
-        if key_code == pygame.K_RIGHT:
+        if key_code == K_RIGHT:
             fly_right_pressed = True
             return
-        if key_code == pygame.K_UP:
+        if key_code == K_UP:
             fly_up_pressed = True
             return
-        if key_code == pygame.K_DOWN:
+        if key_code == K_DOWN:
             fly_down_pressed = True
             return
         return
 
-    if game_started and not game_over and key_code == pygame.K_DOWN:
+    if game_started and not game_over and key_code == K_DOWN:
         if on_ground:
             is_ducking = True
             duck_jump_expires_ms = millis() + HIGH_JUMP_WINDOW_MS
@@ -4792,24 +5130,8 @@ def key_pressed():
             is_fast_falling = True
         return
 
-    if game_started and not game_over and key_code == pygame.K_UP and on_ground:
-        # Buk-spring binnen half seconde geeft high jump.
-        now = millis()
-        used_duck_window = now <= duck_jump_expires_ms
-        jump_velocity = JUMP_VELOCITY
-        if high_jump_powerup_charges > 0:
-            jump_velocity = STACKED_POWER_HIGH_JUMP_VELOCITY if used_duck_window else POWERUP_HIGH_JUMP_VELOCITY
-            high_jump_powerup_charges = max(0, high_jump_powerup_charges - 1)
-        elif used_duck_window:
-            jump_velocity = HIGH_JUMP_VELOCITY
-        if is_jump_shoes_active():
-            jump_velocity *= SHOP_JUMP_SHOES_FACTOR
-        is_ducking = False
-        velocity_y = jump_velocity
-        on_ground = False
-        is_fast_falling = False
-        duck_jump_expires_ms = 0
-        play_sfx(get_jump_sound())
+    if game_started and not game_over and key_code == K_UP:
+        perform_jump_if_possible()
 
 
 def key_released(released_key):
@@ -4818,32 +5140,52 @@ def key_released(released_key):
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
     global boss_left_pressed, boss_right_pressed
     if flight_mode:
-        if released_key == pygame.K_LEFT:
+        if released_key == K_LEFT:
             fly_left_pressed = False
-        elif released_key == pygame.K_RIGHT:
+        elif released_key == K_RIGHT:
             fly_right_pressed = False
-        elif released_key == pygame.K_UP:
+        elif released_key == K_UP:
             fly_up_pressed = False
-        elif released_key == pygame.K_DOWN:
+        elif released_key == K_DOWN:
             fly_down_pressed = False
         return
 
-    if released_key == pygame.K_LEFT:
+    if released_key == K_LEFT:
         boss_left_pressed = False
-    elif released_key == pygame.K_RIGHT:
+    elif released_key == K_RIGHT:
         boss_right_pressed = False
-    elif released_key == pygame.K_c:
+    elif released_key == K_c:
         debug_coin_pressed = False
 
-    if released_key == pygame.K_DOWN:
+    if released_key == K_DOWN:
         if on_ground:
             duck_jump_expires_ms = millis() + HIGH_JUMP_WINDOW_MS
         is_ducking = False
         is_fast_falling = False
 
 
+def mouse_pressed(x, y, button):
+    global touch_ignore_next_click
+    if button == 1:
+        unlock_web_audio_if_needed()
+    if try_press_touch_control(x, y, button):
+        touch_ignore_next_click = True
+
+
+def mouse_released(x, y, button):
+    if button != 1:
+        return
+    if touch_active_button is None:
+        return
+    release_touch_control(touch_active_button)
+
+
 def mouse_clicked(x, y, button):
     global selected_character_idx, shop_active, quit_confirm_active
+    global touch_ignore_next_click
+    if touch_ignore_next_click:
+        touch_ignore_next_click = False
+        return
     if button != 1:
         return
     if shared.show_info:
@@ -4916,7 +5258,7 @@ def draw_equipped_weapon_on_character(pose):
 def draw_high_jump_powerup_effect(pose):
     if high_jump_powerup_charges <= 0:
         return
-    surface = pygame.display.get_surface()
+    surface = pg_display.get_surface()
     if surface is None or not EXPLOSION_FRAMES:
         return
 
@@ -4933,7 +5275,7 @@ def draw_high_jump_powerup_effect(pose):
         return
 
     glow_size = size_by_charge.get(charge_level, 30)
-    glow = pygame.transform.smoothscale(frame, (glow_size, glow_size)).copy()
+    glow = transform.smoothscale(frame, (glow_size, glow_size)).copy()
     glow.set_alpha(alpha_by_charge.get(charge_level, 90))
 
     feet_x = int(pose["x"] + (pose["w"] // 2) - (glow_size // 2))
@@ -5016,7 +5358,7 @@ def draw_main_character():
     }
 
 
-if __name__ == "__main__":
+if __name__ == "__main__" or IS_WEB:
     try:
         run()
     except KeyboardInterrupt:

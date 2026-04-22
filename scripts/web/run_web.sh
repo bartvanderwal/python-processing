@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-PORT="${PORT:-8000}"
+HOST="${HOST:-127.0.0.1}"
+PORT="${PORT:-9000}"
 OUTPUT_DIR="$ROOT_DIR/.web-build/output"
 
 if [ ! -f "$OUTPUT_DIR/index.html" ]; then
@@ -10,5 +11,5 @@ if [ ! -f "$OUTPUT_DIR/index.html" ]; then
   "$ROOT_DIR/scripts/web/build_web.sh"
 fi
 
-echo "[web-run] Serving $OUTPUT_DIR on http://localhost:$PORT"
-python3 -m http.server "$PORT" --directory "$OUTPUT_DIR"
+echo "[web-run] Serving $OUTPUT_DIR on http://$HOST:$PORT"
+python3 -m http.server "$PORT" --bind "$HOST" --directory "$OUTPUT_DIR"

@@ -1,4 +1,5 @@
 import atexit
+import importlib.machinery
 import inspect
 import os
 import random as _random_module
@@ -6,6 +7,7 @@ import sys
 import threading
 import time
 import pygame
+
 from .core.constants import LEFT, RIGHT, CENTER, TOP, BOTTOM, BASELINE, OPEN, CHORD, PIE, PI, TWO_PI
 from .core.public_globals import PUBLIC_GLOBAL_NAMES
 from .core.dispatch import invoke_handler
@@ -56,6 +58,49 @@ _millis_start = None
 _input_manager = AsyncInputManager()
 _draw_call_depth = 0
 _run_thread = None
+
+
+def _bootstrap_pygame_cython():
+    if sys.platform not in ("wasi", "emscripten"):
+        return
+    try:
+        pygame_static = __import__("pygame.base", fromlist=["_"])
+    except Exception:
+        return
+    try:
+        loader = importlib.machinery.FrozenImporter
+        spec = importlib.machinery.ModuleSpec("", loader)
+        pygame_static.import_cython(spec)
+    except Exception:
+        return
+
+
+def _attach_pygame_submodule(name):
+    module = getattr(pygame, name, None)
+    if module is not None:
+        return module
+    module = sys.modules.get("pygame" + "." + name)
+    if module is not None:
+        setattr(pygame, name, module)
+        return module
+    return None
+
+
+_bootstrap_pygame_cython()
+for _pygame_submodule in (
+    "display",
+    "draw",
+    "event",
+    "font",
+    "image",
+    "key",
+    "mixer",
+    "mouse",
+    "time",
+    "transform",
+):
+    _attach_pygame_submodule(_pygame_submodule)
+del _pygame_submodule
 
 # Public Processing-like globals
 width = _width
@@ -203,6 +248,7 @@ def image(img, x, y, w=None, h=None):
     """Draw an image, optionally scaled to width and height."""
     _drawing_api.image(_state(), _require_screen, _apply_coords, _resolve_icon_path, img, x, y, w, h)
 
+
 def request_input(prompt="> "):
     """
     Start an asynchronous console input request.
@@ -210,13 +256,16 @@ def request_input(prompt="> "):
     """
     return _system_api.request_input(_input_manager, prompt)
 
+
 def input_pending():
     """Return whether an async input request is currently pending."""
     return _system_api.input_pending(_input_manager)
 
+
 def arc(x, y, w, h, start, stop, mode=OPEN):
     """Draw an arc on an ellipse defined by center and size."""
     _drawing_api.arc(_state(), _require_screen, _apply_coords, x, y, w, h, start, stop, mode)
+
 
 def bezier(x1, y1, x2, y2, x3, y3, x4, y4, segments=20):
     """Draw a cubic bezier curve."""
@@ -230,25 +279,31 @@ def bezier(x1, y1, x2, y2, x3, y3, x4, y4, segments=20):
 def _ensure_font():
     _ensure_font_core(_state(), pygame)
 
+
 def _apply_coords(vals):
     return tuple(int(v) for v in vals)
+
 
 def _require_screen(func_name: str):
     if _screen is None:
         _init_window()
     _arm_auto_static_run()
 
+
 def _set_public_global(name, value):
     _set_public_global_core(_state(), name, value)
 
+
 def _sync_public_globals_to_sketch():
     _sync_public_globals_to_sketch_core(_state(), PUBLIC_GLOBAL_NAMES)
+
 
 def _resolve_icon_path(path):
     return _resolve_icon_path_core(os.path.dirname(__file__), path)
 
 def _apply_window_icon():
     _apply_window_icon_core(_state(), pygame, os.path.dirname(__file__))
+
 
 def _make_sketch_from_caller():
     # Stack depth increased after extraction into core helper.
@@ -389,5 +444,6 @@ def _maybe_auto_run():
 
     pygame.quit()
     _screen = None
+
 
 atexit.register(_maybe_auto_run)

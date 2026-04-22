@@ -1,0 +1,50 @@
+name: Deploy Dino Web To GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup Web Build Env
+        run: scripts/web/setup_web.sh
+
+      - name: Build Web App
+        run: ENTRY_FILE=dino_game.py INCLUDE_ASSETS=1 LOCAL_CDN=1 scripts/web/build_web.sh
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .web-build/output
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy To Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

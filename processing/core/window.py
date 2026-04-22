@@ -1,4 +1,16 @@
 import os
+import sys
+
+
+def _require_pygame_submodule(pygame, name):
+    module = getattr(pygame, name, None)
+    if module is not None:
+        return module
+    module = sys.modules.get("pygame" + "." + name)
+    if module is not None:
+        setattr(pygame, name, module)
+        return module
+    raise AttributeError(f"pygame has no attribute {name!r}")
 
 
 def resolve_icon_path(base_dir, path):
@@ -18,8 +30,10 @@ def resolve_icon_path(base_dir, path):
 def apply_window_icon(state, pygame, base_dir):
     resolved = resolve_icon_path(base_dir, state["_window_icon"])
     try:
-        icon_surface = pygame.image.load(resolved)
-        pygame.display.set_icon(icon_surface)
+        image = _require_pygame_submodule(pygame, "image")
+        display = _require_pygame_submodule(pygame, "display")
+        icon_surface = image.load(resolved)
+        display.set_icon(icon_surface)
     except Exception:
         # Keep startup robust if icon path is invalid or image can't be loaded.
         pass

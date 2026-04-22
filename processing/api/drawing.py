@@ -1,5 +1,17 @@
 import math
+import sys
 from ..core.constants import CENTER, RIGHT, BOTTOM, BASELINE, OPEN, CHORD, PIE
+
+
+def _require_pygame_submodule(pygame, name):
+    module = getattr(pygame, name, None)
+    if module is not None:
+        return module
+    module = sys.modules.get("pygame" + "." + name)
+    if module is not None:
+        setattr(pygame, name, module)
+        return module
+    raise AttributeError(f"pygame has no attribute {name!r}")
 
 
 def background(state, require_screen, *args):
@@ -109,11 +121,12 @@ def text(state, require_screen, ensure_font, txt, x, y):
 def load_image(state, resolve_icon_path, path):
     pygame = state["pygame"]
     resolved = resolve_icon_path(str(path))
-    return pygame.image.load(resolved)
+    return _require_pygame_submodule(pygame, "image").load(resolved)
 
 
 def image(state, require_screen, apply_coords, resolve_icon_path, img, x, y, w=None, h=None):
     pygame = state["pygame"]
+    transform = _require_pygame_submodule(pygame, "transform")
     require_screen("image")
 
     if isinstance(img, str):
@@ -139,7 +152,7 @@ def image(state, require_screen, apply_coords, resolve_icon_path, img, x, y, w=N
     if img_for_scale.get_bitsize() not in (24, 32):
         img_for_scale = img_for_scale.convert_alpha()
 
-    scaled = pygame.transform.smoothscale(img_for_scale, (w, h))
+    scaled = transform.smoothscale(img_for_scale, (w, h))
     state["_screen"].blit(scaled, (x, y))
 
 
