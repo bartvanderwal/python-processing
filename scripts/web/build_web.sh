@@ -62,6 +62,17 @@ for folder_name in folders:
     if src.exists():
         shutil.copytree(src, dst)
 
+# Web build guard: pygbag exits with code 3 when MP3 assets are present.
+# Keep source assets intact; remove MP3 only from temporary stage folder.
+assets_dir = stage / "assets"
+if assets_dir.exists():
+    removed = 0
+    for mp3_file in assets_dir.rglob("*.mp3"):
+        mp3_file.unlink(missing_ok=True)
+        removed += 1
+    if removed:
+        print(f"[web-build] Removed {removed} mp3 files from stage assets")
+
 print(f"[web-build] Stage ready: {stage} (entry={entry}, include_assets={include_assets})")
 PY
 
