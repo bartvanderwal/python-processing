@@ -1407,15 +1407,15 @@ def get_player_x():
     return player_x
 
 
-def get_dino_hitbox():
-    dino_draw_y = get_dino_draw_y()
-    if is_ducking and on_ground and not game_over:
+def get_dino_hitbox_for_state(player_draw_x, dino_base_y, ducking=False):
+    if ducking:
         dino_h = DUCK_H
         inset_left = DINO_DUCK_HITBOX_INSET_LEFT
         inset_right = DINO_DUCK_HITBOX_INSET_RIGHT
         inset_top = DINO_DUCK_HITBOX_INSET_TOP
         inset_bottom = DINO_DUCK_HITBOX_INSET_BOTTOM
         y_offset = DINO_DUCK_HITBOX_Y_OFFSET
+        dino_draw_y = dino_base_y + (DINO_H - DUCK_H)
     else:
         dino_h = DINO_H
         inset_left = DINO_HITBOX_INSET_LEFT
@@ -1423,14 +1423,20 @@ def get_dino_hitbox():
         inset_top = DINO_HITBOX_INSET_TOP
         inset_bottom = DINO_HITBOX_INSET_BOTTOM
         y_offset = DINO_HITBOX_Y_OFFSET
+        dino_draw_y = dino_base_y
 
-    player_draw_x = get_player_x()
     return (
         player_draw_x + inset_left,
         dino_draw_y + inset_top + y_offset,
         DINO_W - inset_left - inset_right,
         dino_h - inset_top - inset_bottom,
     )
+
+
+def get_dino_hitbox():
+    player_draw_x = get_player_x()
+    ducking = bool(is_ducking and on_ground and not game_over)
+    return get_dino_hitbox_for_state(player_draw_x, dino_y, ducking)
 
 
 def choose_obstacle_type():
@@ -1792,13 +1798,82 @@ def get_ground_pipe_rects(draw_x=None):
     return top_rect, bottom_rect
 
 
+def draw_pipe_column(x, y, w, h):
+    if h <= 0 or w <= 0:
+        return
+    x = int(x)
+    y = int(y)
+    w = int(w)
+    h = int(h)
+    lip_h = min(14, max(8, int(h * 0.2)))
+    inner_w = max(10, w - 16)
+
+    fill(74, 160, 90)
+    rect(x, y, w, h)
+
+    fill(42, 124, 60)
+    rect(x + 8, y + lip_h + 4, inner_w, max(4, h - (lip_h + 8)))
+
+    fill(92, 194, 110)
+    rect(x - 4, y, w + 8, lip_h)
+    fill(56, 138, 72)
+    rect(x + 4, y + 2, max(8, w - 8), max(4, lip_h - 4))
+
+
 def draw_ground_pipe_pair(draw_x=None):
     top_rect, bottom_rect = get_ground_pipe_rects(draw_x=draw_x)
     tx, ty, tw, th = top_rect
     bx, by, bw, bh = bottom_rect
-    fill(74, 160, 90)
-    rect(int(tx), int(ty), int(tw), int(th))
-    rect(int(bx), int(by), int(bw), int(bh))
+    draw_pipe_column(tx, ty, tw, th)
+    draw_pipe_column(bx, by, bw, bh)
+
+
+def apply_one_way_platform_collision(platform_rect, prev_player_x, prev_dino_y, prev_ducking):
+    global dino_y, velocity_y, on_ground, is_fast_falling
+    platform_x, platform_y, platform_w, _ = platform_rect
+    platform_left = platform_x
+    platform_right = platform_x + platform_w
+
+    # If we were standing on an elevated platform and moved past its edge, start falling.
+    current_hitbox = get_dino_hitbox()
+    current_bottom = current_hitbox[1] + current_hitbox[3]
+    support_overlap_x = (
+        current_hitbox[0] + current_hitbox[2] > platform_left + 6
+        and current_hitbox[0] < platform_right - 6
+    )
+    if on_ground and dino_y < DINO_Y:
+        if not (support_overlap_x and abs(current_bottom - platform_y) <= 8):
+            on_ground = False
+
+    prev_hitbox = get_dino_hitbox_for_state(prev_player_x, prev_dino_y, prev_ducking)
+    current_hitbox = get_dino_hitbox()
+    prev_bottom = prev_hitbox[1] + prev_hitbox[3]
+    curr_bottom = current_hitbox[1] + current_hitbox[3]
+
+    landing_overlap_x = (
+        current_hitbox[0] + current_hitbox[2] > platform_left + 6
+        and current_hitbox[0] < platform_right - 6
+    )
+    landing_from_above = (
+        velocity_y >= 0
+        and prev_bottom <= platform_y + 6
+        and curr_bottom >= platform_y
+        and landing_overlap_x
+    )
+    if not landing_from_above:
+        return False
+
+    dino_y = platform_y - DINO_H
+    velocity_y = 0
+    on_ground = True
+    is_fast_falling = False
+    return True
+
+
+def apply_ground_pipe_platform_collision(prev_dino_y, prev_ducking):
+    _, pipe_bottom = get_ground_pipe_rects()
+    # Platformer rule: only the top surface of the lower pipe is solid.
+    return apply_one_way_platform_collision(pipe_bottom, get_player_x(), prev_dino_y, prev_ducking)
 
 
 def is_snake_extended():
@@ -2005,7 +2080,7 @@ def get_pre_boss_shop_rect():
 def get_pre_boss_entrance_rect(level=None):
     target_level = pre_boss_scene_level if level is None else level
     if target_level >= 10:
-        return (width - 164, GROUND_Y - 118, 102, 118)
+        return (width - 168, GROUND_Y - 132, FLIGHT_PIPE_WIDTH, 132)
     return (width - 196, GROUND_Y - 156, 132, 156)
 
 
@@ -2126,17 +2201,11 @@ def draw_pre_boss_shop_world(theme):
 def draw_pre_boss_entrance(level, theme):
     entry_x, entry_y, entry_w, entry_h = get_pre_boss_entrance_rect(level)
     if level >= 10:
-        fill(70, 154, 76)
-        rect(entry_x, entry_y + 24, entry_w, entry_h - 24)
-        rect(entry_x - 8, entry_y + 18, entry_w + 16, 18)
-        fill(42, 110, 46)
-        rect(entry_x + 10, entry_y + 36, entry_w - 20, entry_h - 40)
-        fill(250, 224, 92)
-        rect(entry_x + entry_w // 2 - 4, entry_y - 22, 8, 22)
-        rect(entry_x + entry_w // 2 - 18, entry_y - 10, 36, 8)
-        fill(*theme["text"])
-        text_size(16)
-        text("DOWN: enter cave", entry_x - 8, entry_y + entry_h + 22)
+        draw_pipe_column(entry_x, entry_y, entry_w, entry_h)
+        fill(48, 48, 48)
+        rect(entry_x + 16, entry_y + 18, max(16, entry_w - 32), 12)
+        fill(34, 34, 34)
+        rect(entry_x + 20, entry_y + 22, max(10, entry_w - 40), 6)
         return
 
     fill(128, 88, 52)
@@ -2148,6 +2217,14 @@ def draw_pre_boss_entrance(level, theme):
     fill(*theme["text"])
     text_size(16)
     text("DOWN: face boss", entry_x - 2, entry_y + entry_h + 22)
+
+
+def player_on_platform_top(platform_rect, tolerance=10):
+    hitbox = get_dino_hitbox()
+    feet_y = hitbox[1] + hitbox[3]
+    platform_x, platform_y, platform_w, _ = platform_rect
+    overlap_x = hitbox[0] + hitbox[2] > platform_x + 6 and hitbox[0] < platform_x + platform_w - 6
+    return overlap_x and abs(feet_y - platform_y) <= tolerance
 
 
 def draw_pre_boss_scene(theme):
@@ -2194,13 +2271,37 @@ def draw_pre_boss_scene(theme):
         fill(212, 60, 44)
         text_size(20)
         text("Press DOWN at the stall", 262, 108)
-    elif rects_overlap(player_hitbox, entry_rect):
+    elif rects_overlap(player_hitbox, entry_rect) or (level >= 10 and player_on_platform_top(entry_rect)):
         fill(212, 60, 44)
         text_size(20)
         if level >= 10:
             text("Press DOWN to go underground", 238, 108)
         else:
             text("Press DOWN to start the boss fight", 214, 108)
+
+
+def apply_pre_boss_scene_collisions(prev_player_x, prev_dino_y, prev_ducking):
+    global player_x
+    if pre_boss_scene_level < 10:
+        return
+
+    pipe_rect = get_pre_boss_entrance_rect(pre_boss_scene_level)
+    # Solid side walls for the pipe in the hub scene.
+    current_hitbox = get_dino_hitbox()
+    prev_hitbox = get_dino_hitbox_for_state(prev_player_x, prev_dino_y, prev_ducking)
+    if rects_overlap(current_hitbox, pipe_rect):
+        pipe_x, _, pipe_w, _ = pipe_rect
+        pipe_left = pipe_x
+        pipe_right = pipe_x + pipe_w
+        moved_right_into_pipe = prev_hitbox[0] + prev_hitbox[2] <= pipe_left and current_hitbox[0] + current_hitbox[2] > pipe_left
+        moved_left_into_pipe = prev_hitbox[0] >= pipe_right and current_hitbox[0] < pipe_right
+        if moved_right_into_pipe:
+            player_x = min(player_x, float(pipe_left - DINO_W - 1))
+        elif moved_left_into_pipe:
+            player_x = max(player_x, float(pipe_right + 1))
+
+    # Pipe top is a one-way platform: jump onto it, pass through from below/sides.
+    apply_one_way_platform_collision(pipe_rect, prev_player_x, prev_dino_y, prev_ducking)
 
 
 def start_pending_boss_encounter(level):
@@ -2232,7 +2333,10 @@ def try_interact_pre_boss_scene():
         set_shop_notice("Buy gear from the badger stall, then press Back.", duration_ms=PRE_BOSS_SCENE_NOTICE_MS)
         return True
 
-    if rects_overlap(player_hitbox, get_pre_boss_entrance_rect(pre_boss_scene_level)):
+    entrance_rect = get_pre_boss_entrance_rect(pre_boss_scene_level)
+    if rects_overlap(player_hitbox, entrance_rect) or (
+        pre_boss_scene_level >= 10 and player_on_platform_top(entrance_rect)
+    ):
         start_pending_boss_encounter(pre_boss_scene_level)
         return True
 
@@ -3907,9 +4011,8 @@ def draw_flight_pipes():
         bottom_y = top_h + FLIGHT_PIPE_GAP_H
         bottom_h = GROUND_Y - bottom_y
 
-        fill(74, 160, 90)
-        rect(x, 0, FLIGHT_PIPE_WIDTH, top_h)
-        rect(x, bottom_y, FLIGHT_PIPE_WIDTH, bottom_h)
+        draw_pipe_column(x, 0, FLIGHT_PIPE_WIDTH, top_h)
+        draw_pipe_column(x, bottom_y, FLIGHT_PIPE_WIDTH, bottom_h)
 
 
 def update_and_draw_flight_mode(theme, update_world=True):
@@ -4648,6 +4751,9 @@ def draw():
         return
 
     if pre_boss_scene_level > 0:
+        prev_player_x = player_x
+        prev_dino_y = dino_y
+        prev_ducking = bool(is_ducking and on_ground and not game_over)
         if not game_paused:
             move_dir = int(boss_right_pressed) - int(boss_left_pressed)
             if move_dir != 0:
@@ -4655,6 +4761,7 @@ def draw():
                 max_player_x = float(width - DINO_W - 24)
                 player_x = max(min_player_x, min(max_player_x, player_x + (move_dir * BOSS_PLAYER_SPEED)))
             update_player_vertical_motion()
+            apply_pre_boss_scene_collisions(prev_player_x, prev_dino_y, prev_ducking)
         draw_pre_boss_scene(theme)
         draw_main_character()
         if game_paused:
@@ -4750,6 +4857,8 @@ def draw():
         text(f"Collect weapon powerup for boss L{pending_weapon_powerup_level}", 20, 110)
 
     if not game_over:
+        prev_dino_y = dino_y
+        prev_ducking = bool(is_ducking and on_ground and not game_over)
         # Dino jump physics
         if not on_ground:
             gravity_now = GRAVITY + (FAST_FALL_EXTRA_GRAVITY if is_fast_falling else 0)
@@ -4762,6 +4871,8 @@ def draw():
                 is_fast_falling = False
 
         obstacle_x -= scroll_speed
+        if obstacle_type == "pipe_pair":
+            apply_ground_pipe_platform_collision(prev_dino_y, prev_ducking)
 
         if obstacle_type == "snake" and is_snake_extended() and not snake_hiss_played_for_current:
             snake_hiss_played_for_current = True
@@ -4873,11 +4984,6 @@ def draw():
             if rects_overlap(dino_hitbox, water_hitbox) and not on_lily:
                 is_ducking = False
                 apply_player_hit(SPLASH_SOUND)
-        elif obstacle_type == "pipe_pair":
-            top_pipe, bottom_pipe = get_ground_pipe_rects()
-            if rects_overlap(dino_hitbox, top_pipe) or rects_overlap(dino_hitbox, bottom_pipe):
-                is_ducking = False
-                apply_player_hit(CRASH_SOUND)
         elif obstacle_type == "jump_block":
             pass
         elif rects_overlap(dino_hitbox, obstacle_hitbox):
