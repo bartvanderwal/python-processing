@@ -1,4 +1,5 @@
 import atexit
+import asyncio
 import importlib.machinery
 import inspect
 import os
@@ -12,7 +13,7 @@ from .core.constants import LEFT, RIGHT, CENTER, TOP, BOTTOM, BASELINE, OPEN, CH
 from .core.public_globals import PUBLIC_GLOBAL_NAMES
 from .core.dispatch import invoke_handler
 from .core.input_async import AsyncInputManager
-from .core.runtime import run_app
+from .core.runtime import run_app, run_app_async
 from .core.window import resolve_icon_path as _resolve_icon_path_core
 from .core.window import apply_window_icon as _apply_window_icon_core
 from .core.window import init_window as _init_window_core
@@ -58,6 +59,7 @@ _millis_start = None
 _input_manager = AsyncInputManager()
 _draw_call_depth = 0
 _run_thread = None
+_web_run_task = None
 
 
 def _bootstrap_pygame_cython():
@@ -374,7 +376,7 @@ def _disarm_auto_static_profile():
 
 def run():
     """Start the sketch loop in auto mode (interactive if draw() exists, else static)."""
-    global _run_called
+    global _run_called, _web_run_task
     _run_called = True
     _disarm_auto_static_profile()
     sketch = _make_sketch_from_caller()
@@ -395,9 +397,7 @@ def run():
         global _draw_call_depth
         _draw_call_depth -= 1
 
-    run_app(
-        None,
-        sketch,
+    common_kwargs = dict(
         pygame=pygame,
         init_window=_init_window,
         patch_input_guard=lambda: _input_manager.patch_input_guard(lambda: _draw_call_depth, lambda: _run_thread),
@@ -413,6 +413,20 @@ def run():
         fps_getter=lambda: _fps,
         shutdown=_shutdown,
     )
+
+    if sys.platform in ("wasi", "emscripten"):
+        async def _run_web_loop():
+            await run_app_async(None, sketch, **common_kwargs)
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(_run_web_loop())
+        else:
+            _web_run_task = loop.create_task(_run_web_loop())
+        return
+
+    run_app(None, sketch, **common_kwargs)
 
 
 def _maybe_auto_run():

@@ -1,11 +1,12 @@
 import builtins
-import queue
+from collections import deque
 import threading
 
 
 class AsyncInputManager:
     def __init__(self):
-        self._input_events = queue.Queue()
+        self._input_events = deque()
+        self._events_lock = threading.Lock()
         self._input_lock = threading.Lock()
         self._input_pending = False
         self._input_patch_active = False
@@ -27,10 +28,10 @@ class AsyncInputManager:
 
     def dispatch_events(self, sketch, invoke_handler):
         while True:
-            try:
-                kind, payload = self._input_events.get_nowait()
-            except queue.Empty:
-                break
+            with self._events_lock:
+                if not self._input_events:
+                    break
+                kind, payload = self._input_events.popleft()
 
             if kind == "received":
                 invoke_handler(sketch, "input_received", payload)
@@ -61,11 +62,14 @@ class AsyncInputManager:
     def _input_worker(self, prompt):
         try:
             text_line = input(prompt)
-            self._input_events.put(("received", text_line))
+            with self._events_lock:
+                self._input_events.append(("received", text_line))
         except EOFError as err:
-            self._input_events.put(("error", err))
+            with self._events_lock:
+                self._input_events.append(("error", err))
         except Exception as err:
-            self._input_events.put(("error", err))
+            with self._events_lock:
+                self._input_events.append(("error", err))
         finally:
             with self._input_lock:
                 self._input_pending = False

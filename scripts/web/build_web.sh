@@ -166,6 +166,7 @@ if index.exists():
     html = html.replace('src="https://pygame-web.github.io/cdn/0.9.3//browserfs.min.js"', 'src="/cdn/0.9.3/browserfs.min.js"')
     html = html.replace("https://pygame-web.github.io/cdn/0.9.3/empty.html", "/cdn/0.9.3/empty.html")
     html = html.replace('cdn : "https://pygame-web.github.io/cdn/0.9.3/",', 'cdn : "/cdn/0.9.3/",')
+    html = html.replace('sandbox="allow-scripts allow-pointer-lock"', 'sandbox="allow-scripts allow-pointer-lock allow-same-origin"')
     html = re.sub(r'(<script[^>]*id="site"[^>]*?)\\s+async\\s+defer', r'\\1 defer', html, count=1)
     # Keep output lean: disable terminal addon that triggers extra CDN side-loads.
     html = html.replace('data-os="vtx,snd,gui"', 'data-os="snd,gui"')

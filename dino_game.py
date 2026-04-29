@@ -22,6 +22,7 @@ from processing_extension import (
 import shared
 import math
 import os
+import platform as py_platform
 import sys
 
 # Dino game assets
@@ -328,6 +329,28 @@ TOUCH_BTN_SIZE = 78
 TOUCH_BTN_GAP = 12
 TOUCH_ACTION_BTN_W = 132
 TOUCH_ACTION_BTN_H = 78
+
+
+def detect_touch_controls_enabled():
+    if not IS_WEB:
+        return False
+    try:
+        browser_window = getattr(py_platform, "window", None)
+        navigator = getattr(browser_window, "navigator", None)
+        max_touch_points = int(getattr(navigator, "maxTouchPoints", 0) or 0)
+        if max_touch_points > 0:
+            return True
+
+        media_query = browser_window.matchMedia("(pointer: coarse)") if browser_window is not None else None
+        if media_query is not None and bool(getattr(media_query, "matches", False)):
+            return True
+
+        user_agent = str(getattr(navigator, "userAgent", "")).lower()
+        if any(token in user_agent for token in ("android", "iphone", "ipad", "mobile")):
+            return True
+    except Exception:
+        pass
+    return False
 
 # Progression per level: first chapter = 6 cleared obstacles, then +3 obstacles each chapter.
 LEVEL_OBSTACLE_REQUIREMENTS = [6, 9, 12, 15, 18, 21, 24, 27, 30, 33]
@@ -940,10 +963,21 @@ def update_background_music(force=False):
         target_mode = "credits"
     elif game_completed:
         target_mode = "victory"
+    elif game_over:
+        target_mode = None
     elif not game_started or shared.show_info:
         target_mode = "menu"
     else:
         target_mode = "game"
+    if target_mode is None:
+        if current_music_mode is not None:
+            try:
+                mixer.music.stop()
+            except Exception:
+                pass
+            current_music_mode = None
+        return
+
     if not force and target_mode == current_music_mode:
         return
 
@@ -1293,9 +1327,11 @@ def setup():
     global JUMP_SOUND, ROADRUNNER_JUMP_SOUND, CRASH_SOUND, HISS_SOUND
     global SPLASH_SOUND, FIRE_PLAYER_SOUND, FIRE_ENEMY_SOUND
     global BOSS_EXPLOSION_SOUND, COIN_SOUND, MINI_BOSS_VICTORY_SOUND, INTRO_SPEECH_SOUND
+    global TOUCH_CONTROLS_ENABLED
     size(BASE_GAME_WIDTH, BASE_GAME_HEIGHT)
     frame_rate(60)
     title("Dino Game")
+    TOUCH_CONTROLS_ENABLED = detect_touch_controls_enabled()
     reset_game(show_splash=True)
 
     try:
@@ -1508,9 +1544,9 @@ def get_random_coin_spawn_y():
 def get_active_coin_arc_lift():
     lift = 0
     if high_jump_powerup_charges > 0:
-        lift += 38
+        lift += 142
     if is_jump_shoes_active():
-        lift += 26
+        lift += 56
     return lift
 
 
@@ -1518,9 +1554,9 @@ def get_coin_arc_spawn_ys(obstacle_kind):
     obstacle_cfg = OBSTACLE_CONFIG.get(obstacle_kind, OBSTACLE_CONFIG["cactus_low"])
     obstacle_top = int(obstacle_cfg["y"])
     lift = get_active_coin_arc_lift()
-    side_y = max(196, obstacle_top - 18 - lift)
-    inner_y = max(168, obstacle_top - 46 - lift)
-    apex_y = max(146, obstacle_top - 72 - lift)
+    side_y = max(134, obstacle_top - 18 - lift)
+    inner_y = max(112, obstacle_top - 52 - lift)
+    apex_y = max(92, obstacle_top - 86 - lift)
     return [side_y, inner_y, apex_y, inner_y, side_y]
 
 
@@ -1586,11 +1622,11 @@ def maybe_spawn_bonus_coin_pattern(base_type, base_x):
 
     if int(random(0, 100)) < BONUS_COIN_ARC_CHANCE_PCT:
         arc_points = [
-            (-56, -40 - lift),
-            (-24, -68 - lift),
-            (8, -88 - lift),
-            (40, -68 - lift),
-            (72, -40 - lift),
+            (-56, -48 - lift),
+            (-24, -84 - lift),
+            (8, -118 - lift),
+            (40, -84 - lift),
+            (72, -48 - lift),
         ]
         for dx, dy in arc_points:
             bonus_coins.append({
@@ -1602,7 +1638,7 @@ def maybe_spawn_bonus_coin_pattern(base_type, base_x):
         return
 
     if int(random(0, 100)) < BONUS_COIN_LINE_CHANCE_PCT:
-        line_y = float(max(188, obstacle_y - obstacle_h - 8 - int(lift * 0.8)))
+        line_y = float(max(122, obstacle_y - obstacle_h - 16 - int(lift * 0.85)))
         start_x = obstacle_center_x - 54
         for idx in range(4):
             bonus_coins.append({
@@ -4916,33 +4952,55 @@ def perform_jump_if_possible():
 def should_show_touch_controls():
     if not TOUCH_CONTROLS_ENABLED:
         return False
+    if not game_started and not game_over:
+        return False
     if credits_active or shared.show_info or shop_active:
         return False
     return True
 
 
+def get_touch_control_names():
+    names = ["up", "down"]
+    if game_over:
+        names.append("action")
+    if flight_mode or (game_started and (boss_state is not None or pre_boss_scene_level > 0)):
+        names = ["left", "right", "up", "down", "action"]
+    return names
+
+
 def get_touch_controls_layout():
-    side = max(56, min(TOUCH_BTN_SIZE, int(min(width, height) * 0.14)))
-    gap = max(8, min(TOUCH_BTN_GAP, int(side * 0.18)))
-    pad = 14
+    names = set(get_touch_control_names())
+    side = max(44, min(TOUCH_BTN_SIZE, int(min(width, height) * 0.10)))
+    gap = max(7, min(TOUCH_BTN_GAP, int(side * 0.16)))
+    pad = max(8, int(side * 0.14))
+    buttons = {}
 
-    left_x = pad
-    right_x = left_x + side + gap
-    down_y = height - side - pad
-    up_y = down_y - side - gap
+    if "left" in names or "right" in names:
+        left_x = pad
+        right_x = left_x + side + gap
+        down_y = height - side - pad
+        up_y = down_y - side - gap
+        buttons["left"] = (left_x, down_y, side, side)
+        buttons["right"] = (right_x, down_y, side, side)
+        buttons["up"] = (right_x, up_y, side, side)
+        buttons["down"] = (left_x, up_y, side, side)
+    else:
+        controls_x = width - side - pad
+        down_y = height - side - pad
+        up_y = down_y - side - gap
+        buttons["up"] = (controls_x, up_y, side, side)
+        buttons["down"] = (controls_x, down_y, side, side)
 
-    action_w = max(108, min(TOUCH_ACTION_BTN_W, int(side * 1.8)))
-    action_h = side
-    action_x = width - action_w - pad
-    action_y = height - action_h - pad
+    if "action" in names:
+        action_w = max(96, min(TOUCH_ACTION_BTN_W, int(side * 1.55)))
+        action_h = side
+        action_x = width - action_w - pad
+        action_y = height - action_h - pad
+        if "left" not in names and "right" not in names:
+            action_x = pad
+        buttons["action"] = (action_x, action_y, action_w, action_h)
 
-    return {
-        "left": (left_x, down_y, side, side),
-        "right": (right_x, down_y, side, side),
-        "up": (right_x, up_y, side, side),
-        "down": (left_x, up_y, side, side),
-        "action": (action_x, action_y, action_w, action_h),
-    }
+    return buttons
 
 
 def draw_touch_controls_overlay():
