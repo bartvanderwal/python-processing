@@ -257,9 +257,7 @@ COIN_SPAWN_CHANCE_PCT = 46
 COIN_ARC_SPAWN_CHANCE_PCT = 24
 BONUS_COIN_LINE_CHANCE_PCT = 28
 BONUS_COIN_ARC_CHANCE_PCT = 22
-MULTI_OBSTACLE_PACK_BASE_CHANCE_PCT = 24
-MULTI_OBSTACLE_PACK_LEVEL_BONUS_PCT = 6
-MULTI_OBSTACLE_PACK_MAX_CHANCE_PCT = 72
+MULTI_OBSTACLE_PACK_CHANCE_PCT = 34
 MULTI_JUMP_NOTICE_MS = 1800
 SHOP_SHIELD_MS = 5000
 SHOP_COIN_BOOST_MS = 60000
@@ -1655,38 +1653,20 @@ def maybe_spawn_extra_obstacle_pack(base_type, base_x):
     global extra_obstacles, multi_jump_notice_until_ms
     if USE_SCRIPTED_OBSTACLE_PATTERNS:
         return
-    if current_level < 3:
+    if current_level < 8:
         return
-    if base_type not in ("cactus_low", "cactus_high", "cactus_tower", "snake"):
+    if base_type not in ("cactus_low", "cactus_high", "cactus_tower"):
         return
-    pack_chance_pct = min(
-        MULTI_OBSTACLE_PACK_MAX_CHANCE_PCT,
-        MULTI_OBSTACLE_PACK_BASE_CHANCE_PCT + (current_level * MULTI_OBSTACLE_PACK_LEVEL_BONUS_PCT),
-    )
-    if int(random(0, 100)) >= pack_chance_pct:
+    if int(random(0, 100)) >= MULTI_OBSTACLE_PACK_CHANCE_PCT:
         return
 
-    if current_level < 5:
-        extra_count = 1
-    elif current_level < 8:
-        extra_count = 2
-    else:
-        extra_count = 3 if int(random(0, 100)) < 60 else 2
-
-    allowed_pack_types = ["cactus_low"]
-    if current_level >= 6:
-        allowed_pack_types.append("snake")
-    if current_level >= 9:
-        allowed_pack_types.append("cactus_high")
-
-    pack_types = []
-    for _ in range(extra_count):
-        pick_idx = int(random(0, len(allowed_pack_types)))
-        pack_types.append(allowed_pack_types[pick_idx])
+    pack_types = ["cactus_low", "cactus_low"]
+    if current_level >= 9 and int(random(0, 100)) < 45:
+        pack_types.append("cactus_low")
 
     current_x = base_x
     for idx, obstacle_kind in enumerate(pack_types):
-        gap = random(34, 58) if idx == 0 else random(42, 72)
+        gap = random(44, 68) if idx == 0 else random(52, 82)
         prev_cfg = OBSTACLE_CONFIG[base_type if idx == 0 else pack_types[idx - 1]]
         current_x += prev_cfg["w"] + gap
         extra_obstacles.append({
