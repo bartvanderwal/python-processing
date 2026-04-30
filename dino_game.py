@@ -260,6 +260,7 @@ MAX_ACTIVE_EXPLOSIONS = 72
 CACTUS_BRANCH_EXPLOSION_SIZE = 54
 CACTUS_BRANCH_EXPLOSION_LIFE_MS = 360
 BIRD_MINIBOSS_HITS_REQUIRED = 15
+ZEPPELIN_MINIBOSS_HITS_REQUIRED = 18
 CACTUS_MINIBOSS_HITS_REQUIRED = 15
 COYOTE_TNT_THROW_SPEED = 6.8
 COYOTE_TNT_THROW_GRAVITY = 0.34
@@ -277,6 +278,7 @@ FINAL_BOSS_DEFAULT_HITS_REQUIRED = 35
 COYOTE_HITS_REQUIRED = COYOTE_BIG_BOMB_RETURNS_REQUIRED * COYOTE_BIG_BOMB_BOSS_DAMAGE
 BOSS_REWARD_POINTS = {
     4: BIRD_MINIBOSS_HITS_REQUIRED,
+    6: ZEPPELIN_MINIBOSS_HITS_REQUIRED,
     7: CACTUS_MINIBOSS_HITS_REQUIRED,
     10: FINAL_BOSS_DEFAULT_HITS_REQUIRED,
 }
@@ -356,6 +358,7 @@ CREDITS_TOP_MARGIN = 30
 CREDITS_BOTTOM_MARGIN = 110
 CREDITS_SCROLL_SPEED_FACTOR = 0.82
 CREDITS_FINISH_PAD_PX = 120
+ZEPPELIN_ART_ATTRIBUTION = "Zeppelin artwork reference/source: FreeSVG.org 'Zeppelin' by j4p4n (Public Domain / CC0) https://freesvg.org/zeppelin"
 SCREENSHOT_NOTICE_MS = 2200
 GROUND_Y = 460
 IS_WEB = sys.platform == "emscripten"
@@ -689,6 +692,7 @@ pipe_entry_sound_next_ms = 0
 player_x = float(DINO_X)
 JUMP_SOUND = None
 HIGH_JUMP_SOUND = None
+DINO_ROAR_SOUND = None
 PIPE_ENTRY_SOUND = None
 CRASH_SOUND = None
 HISS_SOUND = None
@@ -766,6 +770,7 @@ boss_state = None
 boss_intro_until_ms = 0
 boss_completed = {
     4: False,
+    6: False,
     7: False,
     10: False,
 }
@@ -929,6 +934,7 @@ def reset_game(show_splash=False):
     boss_intro_until_ms = 0
     boss_completed = {
         4: False,
+        6: False,
         7: False,
         10: False,
     }
@@ -1124,6 +1130,8 @@ def build_credits_items():
     add_text("Credits", 40, (255, 220, 86), bold=True, spacing=62)
     add_text("Thanks to Codex GPT-5.3", 28, (255, 238, 152), spacing=44)
     add_text("https://toolkit.artlist.io/ for the epic over-the-top finale music...", 23, (255, 238, 152), spacing=48)
+    add_text("Zeppelin source: FreeSVG.org / 'Zeppelin' by j4p4n (Public Domain)", 22, (255, 238, 152), spacing=36)
+    add_text("https://freesvg.org/zeppelin", 20, (188, 224, 255), mono=True, spacing=34)
     try:
         macbook_raw = pg_image.load("assets/macbook.png").convert_alpha()
         max_w = 250
@@ -1408,13 +1416,16 @@ def is_intro_speech_playing():
 
 
 def get_jump_sound(is_high_jump=False):
-    if is_high_jump and HIGH_JUMP_SOUND is not None:
-        return HIGH_JUMP_SOUND
+    if is_high_jump:
+        if active_character_key == "dino" and DINO_ROAR_SOUND is not None:
+            return DINO_ROAR_SOUND
+        if HIGH_JUMP_SOUND is not None:
+            return HIGH_JUMP_SOUND
     return JUMP_SOUND
 
 
 def setup():
-    global JUMP_SOUND, HIGH_JUMP_SOUND, PIPE_ENTRY_SOUND, CRASH_SOUND, HISS_SOUND
+    global JUMP_SOUND, HIGH_JUMP_SOUND, DINO_ROAR_SOUND, PIPE_ENTRY_SOUND, CRASH_SOUND, HISS_SOUND
     global SPLASH_SOUND, FIRE_PLAYER_SOUND, FIRE_ENEMY_SOUND
     global BOSS_EXPLOSION_SOUND, COIN_SOUND, MINI_BOSS_VICTORY_SOUND, INTRO_SPEECH_SOUND
     global TOUCH_CONTROLS_ENABLED
@@ -1439,6 +1450,11 @@ def setup():
         HIGH_JUMP_SOUND = mixer.Sound("assets/audio/weeh.wav")
     except Exception:
         HIGH_JUMP_SOUND = None
+
+    try:
+        DINO_ROAR_SOUND = mixer.Sound("assets/audio/roaarr.wav")
+    except Exception:
+        DINO_ROAR_SOUND = None
 
     PIPE_ENTRY_SOUND = make_pipe_entry_sound()
 
@@ -2510,13 +2526,7 @@ def draw_pre_boss_scene(theme):
     if level <= 0:
         return
 
-    if level >= 10:
-        background(162, 156, 148)
-        fill(112, 110, 108)
-        rect(0, GROUND_Y, width, 40)
-        fill(136, 132, 126)
-        rect(0, 132, width, 44)
-    elif level == 7:
+    if level == 7:
         background(242, 210, 164)
         fill(198, 156, 108)
         rect(0, GROUND_Y, width, 40)
@@ -2525,6 +2535,7 @@ def draw_pre_boss_scene(theme):
         muted_bg = tuple(max(28, int(channel * 0.82)) for channel in theme["bg"])
         muted_ground = tuple(max(36, int(channel * 0.8)) for channel in theme["ground_fill"])
         background(*muted_bg)
+        draw_parallax_clouds(theme)
         fill(*muted_ground)
         rect(0, GROUND_Y, width, 40)
 
@@ -2541,8 +2552,6 @@ def draw_pre_boss_scene(theme):
         text("Boss approach: climb the tree to the nest.", 132, 44)
     elif level == 7:
         text("Boss approach: jump on the pipe, then duck.", 120, 44)
-    elif level >= 10:
-        text("Boss approach: visit the shop, then enter the pipe.", 116, 44)
     else:
         text("Boss approach: visit the shop, then enter the green pipe.", 102, 44)
     text_size(18)
@@ -3051,7 +3060,8 @@ def fire_player_weapon():
         return
     if boss_state.get("form") == "ReuzenCoyote":
         return
-    if not weapon_powerup_ready:
+    is_zeppelin_flight_boss = boss_state.get("type") == "zeppelin_miniboss" and flight_mode
+    if (not weapon_powerup_ready) and (not is_zeppelin_flight_boss):
         return
     now = millis()
     if now < player_shot_cooldown_until_ms:
@@ -3060,10 +3070,23 @@ def fire_player_weapon():
     if projectile is None:
         return
     profile = get_player_weapon_profile()
-    dino_draw_y = get_dino_draw_y()
-    dino_h = DUCK_H if (is_ducking and on_ground and not game_over) else DINO_H
-    projectile_y = dino_draw_y + (dino_h // 2) - (profile["h"] // 2)
-    projectile_x = get_player_x() + DINO_W - 4
+    if is_zeppelin_flight_boss:
+        profile = {
+            "w": 18,
+            "h": 8,
+            "speed": 8.6,
+            "kind": "plane_shot",
+            "color": (255, 214, 78),
+            "label": "Plane slingshot",
+        }
+        plane_x, plane_y, plane_w, plane_h = get_flight_plane_rect()
+        projectile_x = plane_x + plane_w - 8
+        projectile_y = plane_y + (plane_h * 0.46) - (profile["h"] / 2)
+    else:
+        dino_draw_y = get_dino_draw_y()
+        dino_h = DUCK_H if (is_ducking and on_ground and not game_over) else DINO_H
+        projectile_y = dino_draw_y + (dino_h // 2) - (profile["h"] // 2)
+        projectile_x = get_player_x() + DINO_W - 4
     projectile.update({
         "x": projectile_x,
         "y": projectile_y,
@@ -3181,6 +3204,9 @@ def get_boss_hitbox(boss):
 
     if boss["type"] == "cactus_miniboss":
         return (boss["x"] + 16, boss["y"] + 16, boss["w"] - 34, boss["h"] - 26)
+
+    if boss["type"] == "zeppelin_miniboss":
+        return (boss["x"] + 24, boss["y"] + 20, boss["w"] - 64, boss["h"] - 42)
 
     if boss.get("form") == "ReuzenDino":
         draw_y = boss["y"]
@@ -3323,6 +3349,29 @@ def spawn_boss_for_level(level):
             "meter_steps": 20,
             "enemy_projectiles": create_projectile_pool(),
             "attack_interval_ms": 1120,
+            "last_attack_ms": now,
+        }
+
+    if level == 6:
+        return {
+            "type": "zeppelin_miniboss",
+            "level": 6,
+            "name": "Mini Boss L6: Zeppelin",
+            "x": float(width - 250),
+            "y": 96.0,
+            "w": 220,
+            "h": 108,
+            "vx": -1.9,
+            "vy": 0.9,
+            "min_x": float(width - 330),
+            "max_x": float(width - 54),
+            "min_y": 68.0,
+            "max_y": 164.0,
+            "hits_taken": 0,
+            "hits_required": ZEPPELIN_MINIBOSS_HITS_REQUIRED,
+            "meter_steps": ZEPPELIN_MINIBOSS_HITS_REQUIRED,
+            "enemy_projectiles": create_projectile_pool(),
+            "attack_interval_ms": 980,
             "last_attack_ms": now,
         }
 
@@ -3489,6 +3538,7 @@ def draw_branch_platform(branch_rect):
 
 def draw_bird_boss_arena(theme):
     background(118, 184, 132)
+    draw_parallax_clouds(theme)
     fill(86, 154, 96)
     ellipse(90, 120, 220, 98)
     ellipse(244, 82, 270, 116)
@@ -3581,6 +3631,104 @@ def draw_cactus_boss_arena(theme):
         ellipse(light_x + jitter, light_y, 7 + int(flicker * 3), 7 + int(flicker * 3))
 
     stroke(154, 154, 162)
+    stroke_weight(2)
+    line(0, GROUND_Y, width, GROUND_Y)
+    no_stroke()
+
+
+def draw_parallax_clouds(theme):
+    now = millis()
+    layer_specs = (
+        {
+            "speed": 0.018,
+            "color": (244, 248, 252),
+            "clouds": ((90, 76, 76), (302, 124, 68), (564, 92, 84)),
+        },
+        {
+            "speed": 0.034,
+            "color": (232, 240, 246),
+            "clouds": ((164, 104, 58), (448, 136, 72), (738, 88, 62)),
+        },
+        {
+            "speed": 0.072,
+            "color": (222, 232, 240),
+            "clouds": ((118, 154, 42), (356, 172, 48), (640, 148, 44), (812, 166, 40)),
+        },
+    )
+
+    for spec in layer_specs:
+        fill(*spec["color"])
+        speed = spec["speed"]
+        for base_x, base_y, cloud_w in spec["clouds"]:
+            travel = (now * speed) % (width + cloud_w + 120)
+            cloud_x = base_x - travel
+            while cloud_x < -cloud_w - 80:
+                cloud_x += width + cloud_w + 140
+            ellipse(cloud_x, base_y, cloud_w, 30)
+            ellipse(cloud_x + 24, base_y - 10, cloud_w - 18, 26)
+            ellipse(cloud_x - 22, base_y - 2, cloud_w - 26, 24)
+
+
+def draw_zeppelin_city_backdrop(theme, arena_mode=False):
+    sky_top = (126, 184, 222) if arena_mode else (144, 198, 232)
+    sky_mid = (176, 212, 236) if arena_mode else (192, 224, 242)
+    sky_low = (222, 232, 214) if arena_mode else (230, 238, 220)
+    background(*sky_top)
+    fill(*sky_mid)
+    rect(0, 112, width, 132)
+    fill(*sky_low)
+    rect(0, 244, width, GROUND_Y - 244)
+    draw_parallax_clouds(theme)
+
+    fill(94, 102, 122)
+    rect(22, 212, 68, GROUND_Y - 212)
+    rect(106, 188, 84, GROUND_Y - 188)
+    rect(206, 226, 54, GROUND_Y - 226)
+    rect(282, 170, 112, GROUND_Y - 170)
+    rect(418, 202, 74, GROUND_Y - 202)
+    rect(514, 156, 96, GROUND_Y - 156)
+    rect(632, 214, 62, GROUND_Y - 214)
+    rect(710, 184, 82, GROUND_Y - 184)
+
+    fill(72, 78, 98)
+    rect(128, 152, 18, 36)
+    rect(320, 122, 22, 48)
+    rect(548, 118, 22, 38)
+    rect(756, 148, 16, 36)
+
+    fill(244, 220, 126)
+    for window_x, window_y in (
+        (36, 238), (56, 238), (116, 214), (138, 214), (160, 214),
+        (302, 196), (324, 196), (346, 196), (368, 196),
+        (432, 222), (454, 222), (528, 182), (550, 182), (572, 182),
+        (720, 206), (742, 206), (764, 206),
+    ):
+        rect(window_x, window_y, 8, 12)
+
+    fill(116, 84, 58)
+    rect(0, GROUND_Y, width, 40)
+    fill(92, 68, 44)
+    rect(0, GROUND_Y - 12, width, 12)
+
+    tower_x = width - 178
+    fill(78, 72, 84)
+    rect(tower_x, 126, 24, GROUND_Y - 126)
+    rect(tower_x - 18, 172, 60, 18)
+    rect(tower_x - 10, 224, 44, 14)
+    fill(164, 62, 54)
+    rect(tower_x + 4, 108, 16, 18)
+
+    if arena_mode:
+        search_phase = millis() / 520.0
+        for beam_x, phase_offset in ((104, 0.0), (376, 1.8), (622, 3.5)):
+            beam_top_x = beam_x + math.sin(search_phase + phase_offset) * 40.0
+            fill(238, 232, 188)
+            triangle(beam_x - 8, GROUND_Y, beam_x + 8, GROUND_Y, beam_top_x, 86)
+
+
+def draw_zeppelin_boss_arena(theme):
+    draw_zeppelin_city_backdrop(theme, arena_mode=True)
+    stroke(86, 74, 60)
     stroke_weight(2)
     line(0, GROUND_Y, width, GROUND_Y)
     no_stroke()
@@ -3783,6 +3931,34 @@ def draw_boss_entity(boss):
                 continue
         return
 
+    if boss["type"] == "zeppelin_miniboss":
+        # Reference attribution for the zeppelin look used here:
+        # FreeSVG.org "Zeppelin" by j4p4n (Public Domain / CC0) https://freesvg.org/zeppelin
+        hull_x = x + 10
+        hull_y = y + 14
+        hull_w = w - 26
+        hull_h = h - 38
+        fill(198, 64, 54)
+        ellipse(hull_x + (hull_w * 0.5), hull_y + (hull_h * 0.44), hull_w, hull_h * 0.7)
+        fill(240, 226, 194)
+        ellipse(hull_x + (hull_w * 0.56), hull_y + (hull_h * 0.42), hull_w * 0.52, hull_h * 0.42)
+        fill(130, 36, 28)
+        rect(x + 30, y + h - 42, w - 92, 10)
+        fill(84, 64, 42)
+        rect(x + 54, y + h - 30, w - 144, 18)
+        fill(62, 62, 70)
+        rect(x + 92, y + h - 16, 16, 8)
+        rect(x + w - 118, y + h - 16, 16, 8)
+        fill(250, 214, 82)
+        rect(x + 82, y + h - 24, 8, 6)
+        rect(x + 104, y + h - 24, 8, 6)
+        rect(x + 126, y + h - 24, 8, 6)
+        fill(142, 42, 34)
+        triangle(x + w - 34, y + 38, x + w + 8, y + 52, x + w - 34, y + 66)
+        fill(220, 184, 94)
+        rect(x + w - 18, y + 46, 18, 10)
+        return
+
     # Final boss
     if boss["form"] == "ReuzenDino":
         if crouching:
@@ -3900,6 +4076,9 @@ def finish_boss_if_defeated(boss):
             "until_ms": now + MINI_BOSS_DEFEAT_DURATION_MS,
             "next_blast_ms": now + MINI_BOSS_BLAST_INTERVAL_MS,
         })
+    if boss["level"] == 6:
+        end_flight_mode()
+        return
     if boss["level"] >= 10:
         final_boss_snapshot = boss_snapshot
         final_boss_defeat_until_ms = now + FINAL_BOSS_DEFEAT_DURATION_MS
@@ -3913,7 +4092,10 @@ def finish_boss_if_defeated(boss):
 
 def update_enemy_projectiles(boss):
     global game_over, coyote_cave_flash_until_ms
-    player_hitbox = get_dino_hitbox()
+    if flight_mode and boss.get("type") == "zeppelin_miniboss":
+        player_hitbox = get_flight_plane_rect()
+    else:
+        player_hitbox = get_dino_hitbox()
     for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
         if projectile["kind"] == "returned_big_tnt":
             projectile["x"] += projectile["vx"]
@@ -4078,7 +4260,7 @@ def update_player_projectiles_against_boss(boss):
             hit = True
 
         if hit:
-            if boss["type"] == "final_boss":
+            if boss["type"] in ("final_boss", "zeppelin_miniboss"):
                 impact_x = projectile_rect[0] + (projectile_rect[2] / 2)
                 impact_y = projectile_rect[1] + (projectile_rect[3] / 2)
                 spawn_explosion_effect(
@@ -4099,7 +4281,8 @@ def spawn_boss_attack_if_needed(boss):
     if now - boss["last_attack_ms"] < boss["attack_interval_ms"]:
         return
     boss["last_attack_ms"] = now
-    player_center_x, player_center_y = get_rect_center(get_dino_hitbox())
+    target_rect = get_flight_plane_rect() if (flight_mode and boss.get("type") == "zeppelin_miniboss") else get_dino_hitbox()
+    player_center_x, player_center_y = get_rect_center(target_rect)
 
     projectile = acquire_projectile_slot(boss["enemy_projectiles"])
     if projectile is None:
@@ -4131,6 +4314,35 @@ def spawn_boss_attack_if_needed(boss):
             "enemy": True,
         })
         play_sfx(FIRE_ENEMY_SOUND)
+        return
+
+    if boss["type"] == "zeppelin_miniboss":
+        proj_w = 18
+        proj_h = 18
+        origin_x = boss["x"] + 42
+        origin_y = boss["y"] + boss["h"] - 26
+        vx, vy = get_linear_aim_velocity(
+            origin_x + (proj_w / 2),
+            origin_y + (proj_h / 2),
+            player_center_x,
+            player_center_y,
+            4.9,
+            min_vy=-1.4,
+            max_vy=3.4,
+        )
+        projectile.update({
+            "x": origin_x,
+            "y": origin_y,
+            "w": proj_w,
+            "h": proj_h,
+            "vx": vx,
+            "vy": vy,
+            "kind": "zeppelin_bomb",
+            "color": (214, 74, 58),
+            "enemy": True,
+        })
+        play_sfx(FIRE_ENEMY_SOUND)
+        return
         return
 
     if boss["type"] == "cactus_miniboss":
@@ -4614,8 +4826,11 @@ def draw_flight_pipes():
 
 def update_and_draw_flight_mode(theme, update_world=True):
     global flight_plane_x, flight_plane_y, flight_pipe_spawn_due_ms, score, game_over
+    global boss_state, boss_intro_until_ms
+    global flight_pipes
 
     now = millis()
+    boss = boss_state if boss_state is not None and boss_state.get("type") == "zeppelin_miniboss" else None
     if update_world:
         # Movement in left half of the screen.
         if fly_left_pressed:
@@ -4632,7 +4847,7 @@ def update_and_draw_flight_mode(theme, update_world=True):
         flight_plane_x = max(20.0, min((width // 2) - plane_w - 10, flight_plane_x))
         flight_plane_y = max(50.0, min(GROUND_Y - plane_h - 4, flight_plane_y))
 
-        if now >= flight_pipe_spawn_due_ms:
+        if boss is None and now >= flight_pipe_spawn_due_ms:
             spawn_flight_pipe()
             spawn_delay = max(700, int(FLIGHT_PIPE_SPAWN_BASE_MS / max(0.8, scroll_speed / BASE_SCROLL_SPEED)))
             flight_pipe_spawn_due_ms = now + spawn_delay
@@ -4644,10 +4859,15 @@ def update_and_draw_flight_mode(theme, update_world=True):
                 score += FLIGHT_PIPE_POINTS
                 register_cleared_obstacle()
 
-        # Flight section ends when the next level is reached.
-        if current_level >= flight_mode_exit_level:
-            end_flight_mode()
-            return
+        if boss is None and current_level >= flight_mode_exit_level:
+            if not boss_completed.get(6, False):
+                boss_state = spawn_boss_for_level(6)
+                boss_intro_until_ms = now + BOSS_INTRO_DURATION_MS
+                boss = boss_state
+                flight_pipes = []
+            else:
+                end_flight_mode()
+                return
 
         flight_pipes[:] = [p for p in flight_pipes if p["x"] + FLIGHT_PIPE_WIDTH > -20]
 
@@ -4665,7 +4885,41 @@ def update_and_draw_flight_mode(theme, update_world=True):
                 crash_flight_mode()
                 break
 
-    draw_flight_pipes()
+        if boss is not None:
+            boss["x"] += boss.get("vx", 0.0)
+            boss["y"] += boss.get("vy", 0.0)
+            if boss["x"] <= boss["min_x"] or boss["x"] >= boss["max_x"]:
+                boss["vx"] *= -1
+            if boss["y"] <= boss["min_y"] or boss["y"] >= boss["max_y"]:
+                boss["vy"] *= -1
+            spawn_boss_attack_if_needed(boss)
+            update_enemy_projectiles(boss)
+            if game_over:
+                return
+            update_player_projectiles_against_boss(boss)
+            finish_boss_if_defeated(boss)
+            if not flight_mode:
+                return
+            if rects_overlap(get_flight_plane_rect(), get_boss_hitbox(boss)):
+                crash_flight_mode()
+                return
+
+    if boss is not None:
+        draw_zeppelin_boss_arena(theme)
+    else:
+        draw_flight_pipes()
+
+    if boss is not None:
+        draw_boss_entity(boss)
+        draw_boss_meter(boss, theme)
+        for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
+            draw_projectile(projectile)
+        for projectile in iter_active_projectiles(player_projectiles):
+            draw_projectile(projectile)
+        draw_explosion_effects()
+        fill(*theme["text"])
+        text_size(16)
+        text("Weapon: Plane slingshot (SPACE)", 20, 66)
 
     if isDebugMode:
         plane_rect = get_flight_plane_rect()
@@ -4683,7 +4937,11 @@ def update_and_draw_flight_mode(theme, update_world=True):
             )
         no_stroke()
 
-    if millis() < airplane_warning_until_ms and not game_over:
+    if boss is not None and millis() < boss_intro_until_ms:
+        fill(200, 40, 40)
+        text_size(32)
+        text("Mini boss: Zeppelin!", width // 2 - 142, 34)
+    elif millis() < airplane_warning_until_ms and not game_over:
         fill(*theme["accent"])
         text_size(20)
         text("Flight mode: stay left and dodge the pipes!", width // 2 - 170, 28)
@@ -5238,6 +5496,7 @@ def draw():
         return
 
     background(*theme["bg"])
+    draw_parallax_clouds(theme)
     fill(*theme["ground_fill"])
     rect(0, GROUND_Y, width, 40)  # ground
     stroke(*theme["ground_line"])
@@ -6054,6 +6313,10 @@ def key_pressed():
         if boss_state.get("form") == "ReuzenCoyote":
             try_throw_back_coyote_bomb()
             return
+        fire_player_weapon()
+        return
+
+    if game_started and not game_over and key == " " and flight_mode and boss_state is not None and boss_state.get("type") == "zeppelin_miniboss":
         fire_player_weapon()
         return
 

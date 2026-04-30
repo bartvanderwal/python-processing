@@ -23,6 +23,7 @@ Elk principe en elke structurele beslissing in dit document bevat expliciet een 
 Lokaal draaien en web-deploy moeten dezelfde game opleveren qua gedrag.
 
 Waarom:
+
 - We willen lokaal snel itereren in Python-modus, zonder dat gedrag later op web functioneel afwijkt.
 - Dat voorkomt verrassingen bij release: wat lokaal speelbaar en correct is, moet online dezelfde mechanics tonen.
 - Performance kan tussen runtime-omgevingen verschillen; daarom testen we naast lokaal ook regelmatig de web-build zelf.
@@ -44,6 +45,13 @@ De game gebruikt dezelfde visuele taal op meerdere plekken.
 - Level-flow is leerbaar: obstaclevolgordes zijn in basis scripted/hardcoded per level, zodat spelers patronen kunnen herkennen en verbeteren.
 - Variatie mag alleen gecontroleerd: vanaf hogere levels uitsluitend via een kleine, vooraf ontworpen set veilige patroonblokken.
 - Onmogelijke combinaties zijn verboden: runtime mag geen obstacleketens genereren die niet haalbaar zijn met normale timing/spronghoogte wanneer een powerup net is afgelopen.
+- Luchtlevels gebruiken decoratieve parallax-wolken als sfeerlaag en leesbare snelheidsreferentie, nooit als obstacle of misleidende hitbox.
+
+Waarom:
+
+- De Chrome Dino-vluchtstukken voelen sterker als luchtspace wanneer de achtergrond subtiel meebeweegt.
+- Parallax helpt snelheid en diepte lezen zonder extra gameplay-ruis toe te voegen.
+- Wolken mogen de obstacleleesbaarheid niet aantasten; daarom blijven ze puur decoratief.
 
 ![Cowboy dead](cowboy-dead.png)
 
@@ -124,6 +132,14 @@ Voor elk boss level stopt de endless-runner-flow kort in een statische hubscene.
 
 - Voor level 4 en level 7 staat rechts een arena-ingang.
 - De speler kan eerst shoppen en daarna bewust het gevecht starten.
+- Level 6 heeft een afwijkende minibossflow: aan het einde van de pipe/flappy flight-sectie verschijnt een Zeppelin in de lucht in plaats van een ground-hub.
+- Die Zeppelin wordt verslagen vanuit het eigen gele vliegtuig met een schot-aanval; de boss is dus onderdeel van `flight_mode` en niet van de gewone boss hub.
+
+Waarom:
+
+- De overgang van level 5 naar 6 bouwt al een luchtmechanic op; een luchtboss benut die bestaande skill direct.
+- Een ground-hub zou de opgebouwde flight-spanning onnodig onderbreken.
+- De speler moet dezelfde besturing en voertuigfantasie behouden tijdens het gevecht.
 
 ### Eindbaas level 10
 
@@ -144,6 +160,7 @@ Voor elk boss level stopt de endless-runner-flow kort in een statische hubscene.
   - level-progressie komt uit het aantal cleared obstacles.
 - Boss rewards volgen de benodigde hits:
   - miniboss `1`: `15` punten;
+  - miniboss `flight Zeppelin`: `18` punten;
   - miniboss `2`: `15` punten;
   - eindbaas: `35` punten.
 
@@ -205,6 +222,8 @@ Voor elk boss level stopt de endless-runner-flow kort in een statische hubscene.
 - Tweede vliegtuighoofdstuk.
 - Flight mode loopt door over level 5 en 6.
 - Pijpen blijven actief als obstakeltype.
+- Aan het eind van deze luchtsectie verschijnt de Zeppelin-tussenbaas.
+- De speler blijft in het gele vliegtuig en schiet de Zeppelin neer vanuit de lucht.
 
 ### Level 7: `Cactus Fortress`
 
