@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import ssl
+import sys
+import traceback
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,12 +29,28 @@ WEB_REQUIREMENTS = [
 ]
 
 
+def log_script_exception(context: str, exc: Exception, *, once_key: str | None = None) -> None:
+    if not hasattr(log_script_exception, "_seen_keys"):
+        log_script_exception._seen_keys = set()
+    if once_key is not None:
+        if once_key in log_script_exception._seen_keys:
+            return
+        log_script_exception._seen_keys.add(once_key)
+    print(f"[generate_requirements_locks] {context}: {exc.__class__.__name__}: {exc}", file=sys.stderr)
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+
 def build_ssl_context() -> ssl.SSLContext:
     try:
         import certifi
 
         return ssl.create_default_context(cafile=certifi.where())
-    except Exception:
+    except Exception as exc:
+        log_script_exception(
+            "Falling back to system CA bundle because certifi could not be loaded",
+            exc,
+            once_key="build_ssl_context_certifi",
+        )
         return ssl.create_default_context()
 
 

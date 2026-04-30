@@ -18,6 +18,20 @@ Elk principe en elke structurele beslissing in dit document bevat expliciet een 
 - Zonder rationale zijn regels lastig te toetsen en verouderen ze sneller.
 - Met rationale kunnen we wijzigingen evalueren op intentie, niet alleen op letterlijke tekst.
 
+## Exception Visibility
+
+Exceptions worden niet stil ingeslikt.
+
+Waarom:
+
+- Een fout zonder logregel is in praktijk nauwelijks te debuggen, zeker in de web-runtime.
+- Stil ingeslikte exceptions maken regressies onzichtbaar en laten kapot gedrag doorgaan alsof het "gewoon niet ondersteund" is.
+- Browser-, audio- en assetproblemen moeten direct herleidbaar zijn naar de callsite en het bestand dat faalt.
+
+- Geen `except Exception: pass` in projectcode.
+- Als een exception bewust wordt opgevangen om runtime of tooling overeind te houden, log dan minimaal context, exceptiontype en melding naar console of stderr.
+- Bij herhaalbare runtimefouten mag logging gededupliceerd worden om spam te beperken, maar de eerste fout moet zichtbaar blijven.
+
 ## Platform Parity (DEV/PROD)
 
 Lokaal draaien en web-deploy moeten dezelfde game opleveren qua gedrag.
@@ -46,12 +60,14 @@ De game gebruikt dezelfde visuele taal op meerdere plekken.
 - Variatie mag alleen gecontroleerd: vanaf hogere levels uitsluitend via een kleine, vooraf ontworpen set veilige patroonblokken.
 - Onmogelijke combinaties zijn verboden: runtime mag geen obstacleketens genereren die niet haalbaar zijn met normale timing/spronghoogte wanneer een powerup net is afgelopen.
 - Luchtlevels gebruiken decoratieve parallax-wolken als sfeerlaag en leesbare snelheidsreferentie, nooit als obstacle of misleidende hitbox.
+- Menu-tekst boven de luchtlaag gebruikt karakter-afhankelijke contrastkleuren en mag nooit visueel over elkaar heen vallen; titel, startprompt en character-select copy blijven gescheiden blokken.
 
 Waarom:
 
 - De Chrome Dino-vluchtstukken voelen sterker als luchtspace wanneer de achtergrond subtiel meebeweegt.
 - Parallax helpt snelheid en diepte lezen zonder extra gameplay-ruis toe te voegen.
 - Wolken mogen de obstacleleesbaarheid niet aantasten; daarom blijven ze puur decoratief.
+- Ook in het menu moet tekst boven de lucht onmiddellijk leesbaar blijven; gekozen karakter en luchtkleur bepalen dus mee welke donkere contrastkleur daar werkt.
 
 ![Cowboy dead](cowboy-dead.png)
 

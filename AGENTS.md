@@ -10,6 +10,7 @@ Deze codebase is een eigen Python-implementatie van Processing en wijkt op veel 
 
 - **Gebruik alleen functies die in api.md of de code zelf staan.** Neem niet automatisch aan dat alle Java Processing functies werken.
 - **Voorbeeld:** Er zijn géén functies als `loop()` of `no_loop()`. De event-loop wordt geregeld door `run()` in `processing/processing.py`.
+- **Slik exceptions niet stil in.** Als je bewust een fout opvangt om runtime of tooling door te laten lopen, log dan minimaal context + exception naar console of stderr. Geen `except Exception: pass` of vergelijkbare stille fallbacks.
 - **Wil je gedrag aanpassen (zoals stoppen met tekenen bij game over), gebruik dan een eigen variabele:**
 
 ```python

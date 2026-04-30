@@ -1,5 +1,17 @@
 import os
 import sys
+import traceback
+
+
+def _log_window_exception(context, exc, *, once_key=None):
+    if not hasattr(_log_window_exception, "_seen_keys"):
+        _log_window_exception._seen_keys = set()
+    if once_key is not None:
+        if once_key in _log_window_exception._seen_keys:
+            return
+        _log_window_exception._seen_keys.add(once_key)
+    print(f"[window] {context}: {exc.__class__.__name__}: {exc}", file=sys.stderr)
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
 
 
 def _require_pygame_submodule(pygame, name):
@@ -34,9 +46,13 @@ def apply_window_icon(state, pygame, base_dir):
         display = _require_pygame_submodule(pygame, "display")
         icon_surface = image.load(resolved)
         display.set_icon(icon_surface)
-    except Exception:
+    except Exception as exc:
+        _log_window_exception(
+            f"Failed to apply window icon '{resolved}'",
+            exc,
+            once_key=f"window_icon:{resolved}",
+        )
         # Keep startup robust if icon path is invalid or image can't be loaded.
-        pass
 
 
 def init_window(state, pygame, set_public_global, apply_window_icon_func):

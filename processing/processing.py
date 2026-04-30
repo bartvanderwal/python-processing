@@ -7,6 +7,7 @@ import random as _random_module
 import sys
 import threading
 import time
+import traceback
 import pygame
 
 from .core.constants import LEFT, RIGHT, CENTER, TOP, BOTTOM, BASELINE, OPEN, CHORD, PIE, PI, TWO_PI
@@ -62,18 +63,39 @@ _run_thread = None
 _web_run_task = None
 
 
+def _log_processing_exception(context, exc, *, once_key=None):
+    if not hasattr(_log_processing_exception, "_seen_keys"):
+        _log_processing_exception._seen_keys = set()
+    if once_key is not None:
+        if once_key in _log_processing_exception._seen_keys:
+            return
+        _log_processing_exception._seen_keys.add(once_key)
+    print(f"[processing] {context}: {exc.__class__.__name__}: {exc}", file=sys.stderr)
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+
 def _bootstrap_pygame_cython():
     if sys.platform not in ("wasi", "emscripten"):
         return
     try:
         pygame_static = __import__("pygame.base", fromlist=["_"])
-    except Exception:
+    except Exception as exc:
+        _log_processing_exception(
+            "Failed to import pygame.base during wasm bootstrap",
+            exc,
+            once_key="bootstrap_import_pygame_base",
+        )
         return
     try:
         loader = importlib.machinery.FrozenImporter
         spec = importlib.machinery.ModuleSpec("", loader)
         pygame_static.import_cython(spec)
-    except Exception:
+    except Exception as exc:
+        _log_processing_exception(
+            "Failed to import pygame cython submodules during wasm bootstrap",
+            exc,
+            once_key="bootstrap_import_cython",
+        )
         return
 
 

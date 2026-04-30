@@ -1,0 +1,12 @@
+{
+  "flake8.enabled": true,
+  "flake8.showNotifications": "off",
+  "flake8.importStrategy": "useBundled",
+  "flake8.cwd": "${workspaceFolder}",
+  "flake8.ignorePatterns": [
+    "**/.venv/**",
+    "**/.venv-web/**",
+    "**/.web-build/**",
+    "**/__pycache__/**"
+  ]
+}

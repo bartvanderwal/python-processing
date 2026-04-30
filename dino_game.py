@@ -25,6 +25,7 @@ import math
 import os
 import platform as py_platform
 import sys
+import traceback
 
 # Dino game assets
 DINO_IMG = load_image("assets/dino-transparant.png")
@@ -60,7 +61,12 @@ def load_optional_image(path_candidates):
             continue
         try:
             return load_image(candidate)
-        except Exception:
+        except Exception as exc:
+            log_soft_exception(
+                f"Failed to load optional image '{candidate}'",
+                exc,
+                once_key=f"load_optional_image:{candidate}",
+            )
             continue
     return None
 
@@ -207,6 +213,7 @@ FLIGHT_PIPE_WIDTH = 72
 FLIGHT_PIPE_SPAWN_BASE_MS = 1500
 FLIGHT_PLANE_SPEED = 5.0
 FLIGHT_PIPE_POINTS = 2
+ZEPPELIN_CITY_APPROACH_DURATION_MS = 2400
 AIRPLANE_PICKUP_W = 104
 AIRPLANE_PICKUP_H = 40
 PLAYER_SHOOT_COOLDOWN_MS = 180
@@ -368,6 +375,29 @@ TOUCH_BTN_GAP = 12
 TOUCH_ACTION_BTN_W = 132
 TOUCH_ACTION_BTN_H = 78
 
+_logged_soft_exception_keys = set()
+
+
+def log_soft_exception(context, exc, *, once_key=None):
+    if once_key is not None:
+        if once_key in _logged_soft_exception_keys:
+            return
+        _logged_soft_exception_keys.add(once_key)
+    print(f"[dino_game] {context}: {exc.__class__.__name__}: {exc}", file=sys.stderr)
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
+
+
+def load_sound_or_none(path):
+    try:
+        return mixer.Sound(path)
+    except Exception as exc:
+        log_soft_exception(
+            f"Failed to load sound '{path}'",
+            exc,
+            once_key=f"load_sound:{path}",
+        )
+        return None
+
 
 def detect_touch_controls_enabled():
     if not IS_WEB:
@@ -386,8 +416,12 @@ def detect_touch_controls_enabled():
         user_agent = str(getattr(navigator, "userAgent", "")).lower()
         if any(token in user_agent for token in ("android", "iphone", "ipad", "mobile")):
             return True
-    except Exception:
-        pass
+    except Exception as exc:
+        log_soft_exception(
+            "detect_touch_controls_enabled failed",
+            exc,
+            once_key="detect_touch_controls_enabled",
+        )
     return False
 
 # Progression per level: first chapter = 6 cleared obstacles, then +3 obstacles each chapter.
@@ -619,6 +653,9 @@ CHARACTER_CONFIG = {
             "ground_line": (120, 120, 120),
             "text": (30, 30, 30),
             "accent": (70, 70, 70),
+            "menu_title": (70, 70, 70),
+            "menu_prompt": (52, 52, 52),
+            "menu_meta": (84, 84, 84),
         },
     },
     "cowboy": {
@@ -634,6 +671,9 @@ CHARACTER_CONFIG = {
             "ground_line": (150, 98, 50),
             "text": (60, 35, 20),
             "accent": (178, 84, 28),
+            "menu_title": (150, 86, 38),
+            "menu_prompt": (78, 47, 26),
+            "menu_meta": (112, 72, 42),
         },
     },
     "roadrunner": {
@@ -648,6 +688,9 @@ CHARACTER_CONFIG = {
             "ground_line": (121, 104, 76),
             "text": (16, 58, 88),
             "accent": (0, 112, 163),
+            "menu_title": (0, 112, 163),
+            "menu_prompt": (16, 58, 88),
+            "menu_meta": (34, 86, 122),
         },
     },
 }
@@ -1015,8 +1058,12 @@ def update_background_music(force=False):
         if current_music_mode is not None:
             try:
                 mixer.music.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                log_soft_exception(
+                    "Failed to stop background music while disabling music",
+                    exc,
+                    once_key="music_stop_disable",
+                )
             current_music_mode = None
         return
 
@@ -1034,8 +1081,12 @@ def update_background_music(force=False):
         if current_music_mode is not None:
             try:
                 mixer.music.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                log_soft_exception(
+                    "Failed to stop background music while clearing target mode",
+                    exc,
+                    once_key="music_stop_clear",
+                )
             current_music_mode = None
         return
 
@@ -1055,7 +1106,12 @@ def update_background_music(force=False):
         mixer.music.set_volume(MUSIC_VOLUME)
         mixer.music.play(-1)
         current_music_mode = target_mode
-    except Exception:
+    except Exception as exc:
+        log_soft_exception(
+            f"Failed to start background music '{target_path}' for mode '{target_mode}'",
+            exc,
+            once_key=f"music_load:{target_mode}:{target_path}",
+        )
         # Keep the game running even when a track cannot be loaded.
         current_music_mode = None
 
@@ -1147,8 +1203,12 @@ def build_credits_items():
             "subcaption": "assets/macbook.png",
             "height": target_h + 74,
         })
-    except Exception:
-        pass
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to add credits image 'assets/macbook.png'",
+            exc,
+            once_key="credits_macbook",
+        )
     add_spacer(18)
 
     add_text("Enemies & Visual Assets", 36, (255, 220, 86), bold=True, spacing=58)
@@ -1160,7 +1220,12 @@ def build_credits_items():
     for full_path, rel_path, file_name in image_sources:
         try:
             raw = pg_image.load(full_path).convert_alpha()
-        except Exception:
+        except Exception as exc:
+            log_soft_exception(
+                f"Failed to load credits image '{full_path}'",
+                exc,
+                once_key=f"credits_image:{full_path}",
+            )
             continue
         max_w = 250
         max_h = 150
@@ -1326,7 +1391,12 @@ def capture_screenshot():
     path = os.path.join("assets", "screenshots", filename)
     try:
         pg_image.save(surface, path)
-    except Exception:
+    except Exception as exc:
+        log_soft_exception(
+            f"Failed to save screenshot '{path}'",
+            exc,
+            once_key=f"screenshot:{path}",
+        )
         screenshot_notice_text = "Screenshot failed (save error)"
         screenshot_notice_until_ms = millis() + SCREENSHOT_NOTICE_MS
         return None
@@ -1342,14 +1412,23 @@ def play_sfx(sound):
         return
     try:
         sound.play()
-    except Exception:
-        pass
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to play sound effect",
+            exc,
+            once_key="play_sfx",
+        )
 
 
 def make_pipe_entry_sound():
     try:
         init_info = mixer.get_init()
-    except Exception:
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to query mixer init state for pipe entry sound",
+            exc,
+            once_key="pipe_sound_get_init",
+        )
         init_info = None
     if not init_info:
         return None
@@ -1380,7 +1459,12 @@ def make_pipe_entry_sound():
 
     try:
         return mixer.Sound(buffer=bytes(sound_buffer))
-    except Exception:
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to create synthesized pipe entry sound",
+            exc,
+            once_key="pipe_sound_create",
+        )
         return None
 
 
@@ -1389,8 +1473,12 @@ def stop_intro_speech():
     try:
         if INTRO_SPEECH_CHANNEL is not None:
             INTRO_SPEECH_CHANNEL.stop()
-    except Exception:
-        pass
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to stop intro speech",
+            exc,
+            once_key="stop_intro_speech",
+        )
     INTRO_SPEECH_CHANNEL = None
 
 
@@ -1404,14 +1492,24 @@ def play_intro_speech(force_restart=True):
                 return
             INTRO_SPEECH_CHANNEL.stop()
         INTRO_SPEECH_CHANNEL = INTRO_SPEECH_SOUND.play()
-    except Exception:
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to play intro speech",
+            exc,
+            once_key="play_intro_speech",
+        )
         INTRO_SPEECH_CHANNEL = None
 
 
 def is_intro_speech_playing():
     try:
         return INTRO_SPEECH_CHANNEL is not None and INTRO_SPEECH_CHANNEL.get_busy()
-    except Exception:
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to query intro speech state",
+            exc,
+            once_key="intro_speech_busy",
+        )
         return False
 
 
@@ -1438,64 +1536,29 @@ def setup():
     try:
         if not mixer.get_init():
             mixer.init()
-    except Exception:
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to initialize mixer in setup()",
+            exc,
+            once_key="setup_mixer_init",
+        )
         return
 
-    try:
-        JUMP_SOUND = mixer.Sound("assets/audio/jump.wav")
-    except Exception:
-        JUMP_SOUND = None
-
-    try:
-        HIGH_JUMP_SOUND = mixer.Sound("assets/audio/weeh.wav")
-    except Exception:
-        HIGH_JUMP_SOUND = None
-
-    try:
-        DINO_ROAR_SOUND = mixer.Sound("assets/audio/roaarr.wav")
-    except Exception:
-        DINO_ROAR_SOUND = None
+    JUMP_SOUND = load_sound_or_none("assets/audio/jump.wav")
+    HIGH_JUMP_SOUND = load_sound_or_none("assets/audio/weeh.wav")
+    DINO_ROAR_SOUND = load_sound_or_none("assets/audio/roaarr.wav")
 
     PIPE_ENTRY_SOUND = make_pipe_entry_sound()
 
-    try:
-        CRASH_SOUND = mixer.Sound("assets/audio/crash.wav")
-    except Exception:
-        CRASH_SOUND = None
-
-    try:
-        HISS_SOUND = mixer.Sound("assets/audio/hiss.wav")
-    except Exception:
-        HISS_SOUND = None
-
-    try:
-        SPLASH_SOUND = mixer.Sound("assets/audio/splash.wav")
-    except Exception:
-        SPLASH_SOUND = None
-
-    try:
-        FIRE_PLAYER_SOUND = mixer.Sound("assets/audio/fire-player.wav")
-    except Exception:
-        FIRE_PLAYER_SOUND = None
-
-    try:
-        FIRE_ENEMY_SOUND = mixer.Sound("assets/audio/fire-enemy.wav")
-    except Exception:
-        FIRE_ENEMY_SOUND = None
-
-    try:
-        BOSS_EXPLOSION_SOUND = mixer.Sound("assets/audio/boss-explosion.wav")
-    except Exception:
-        BOSS_EXPLOSION_SOUND = None
-
-    try:
-        COIN_SOUND = mixer.Sound("assets/audio/ping.wav")
-    except Exception:
-        COIN_SOUND = None
-
-    try:
-        MINI_BOSS_VICTORY_SOUND = mixer.Sound("assets/audio/victory.wav")
-    except Exception:
+    CRASH_SOUND = load_sound_or_none("assets/audio/crash.wav")
+    HISS_SOUND = load_sound_or_none("assets/audio/hiss.wav")
+    SPLASH_SOUND = load_sound_or_none("assets/audio/splash.wav")
+    FIRE_PLAYER_SOUND = load_sound_or_none("assets/audio/fire-player.wav")
+    FIRE_ENEMY_SOUND = load_sound_or_none("assets/audio/fire-enemy.wav")
+    BOSS_EXPLOSION_SOUND = load_sound_or_none("assets/audio/boss-explosion.wav")
+    COIN_SOUND = load_sound_or_none("assets/audio/ping.wav")
+    MINI_BOSS_VICTORY_SOUND = load_sound_or_none("assets/audio/victory.wav")
+    if MINI_BOSS_VICTORY_SOUND is None:
         MINI_BOSS_VICTORY_SOUND = COIN_SOUND
 
     INTRO_SPEECH_SOUND = None
@@ -1505,7 +1568,12 @@ def setup():
         try:
             INTRO_SPEECH_SOUND = mixer.Sound(speech_path)
             break
-        except Exception:
+        except Exception as exc:
+            log_soft_exception(
+                f"Failed to load intro speech '{speech_path}'",
+                exc,
+                once_key=f"intro_speech:{speech_path}",
+            )
             INTRO_SPEECH_SOUND = None
 
     update_background_music(force=True)
@@ -1845,6 +1913,47 @@ def spawn_obstacle(force_type=None):
 
 def get_flight_plane_rect():
     return (flight_plane_x, flight_plane_y, AIRPLANE_PICKUP_W, AIRPLANE_PICKUP_H)
+
+
+def get_flight_plane_bounds(has_boss=False):
+    plane_w = AIRPLANE_PICKUP_W
+    plane_h = AIRPLANE_PICKUP_H
+    min_x = 20.0
+    max_x = float(width - plane_w - 20) if has_boss else float((width // 2) - plane_w - 10)
+    min_y = 50.0
+    max_y = float(GROUND_Y - plane_h - 4)
+    return (min_x, max_x, min_y, max_y)
+
+
+def get_zeppelin_intro_progress(boss, now=None):
+    if boss.get("type") != "zeppelin_miniboss" or boss.get("phase") != "approach":
+        return 1.0
+    if now is None:
+        now = millis()
+    duration_ms = max(1, int(boss.get("approach_duration_ms", ZEPPELIN_CITY_APPROACH_DURATION_MS)))
+    elapsed = max(0, now - int(boss.get("phase_started_ms", now)))
+    return max(0.0, min(1.0, elapsed / float(duration_ms)))
+
+
+def update_zeppelin_boss_phase(boss, now):
+    if boss.get("type") != "zeppelin_miniboss" or boss.get("phase") != "approach":
+        return False
+
+    progress = get_zeppelin_intro_progress(boss, now)
+    eased = 1.0 - ((1.0 - progress) ** 3)
+    boss["x"] = boss["approach_from_x"] + ((boss["approach_to_x"] - boss["approach_from_x"]) * eased)
+    boss["y"] = boss["approach_from_y"] + ((boss["approach_to_y"] - boss["approach_from_y"]) * eased)
+
+    if progress < 1.0:
+        return False
+
+    boss["phase"] = "fight"
+    boss["phase_started_ms"] = now
+    boss["x"] = boss["approach_to_x"]
+    boss["y"] = boss["approach_to_y"]
+    boss["vx"] = boss.get("fight_vx", -1.9)
+    boss["vy"] = boss.get("fight_vy", 0.9)
+    return True
 
 
 def spawn_flight_pipe():
@@ -3061,6 +3170,8 @@ def fire_player_weapon():
     if boss_state.get("form") == "ReuzenCoyote":
         return
     is_zeppelin_flight_boss = boss_state.get("type") == "zeppelin_miniboss" and flight_mode
+    if is_zeppelin_flight_boss and boss_state.get("phase") != "fight":
+        return
     if (not weapon_powerup_ready) and (not is_zeppelin_flight_boss):
         return
     now = millis()
@@ -3271,6 +3382,14 @@ def get_cactus_visible_arm_indices(boss):
     return [idx for idx, hp in enumerate(boss["branch_hp"]) if hp > 0 and get_cactus_arm_side(idx) == visible_side]
 
 
+def get_cactus_boss_platform_rects():
+    return (
+        (96, GROUND_Y - 66, 132, 16),
+        (318, GROUND_Y - 114, 146, 16),
+        (560, GROUND_Y - 74, 132, 16),
+    )
+
+
 def cactus_all_arms_destroyed(boss):
     return all(hp <= 0 for hp in boss["branch_hp"])
 
@@ -3357,16 +3476,25 @@ def spawn_boss_for_level(level):
             "type": "zeppelin_miniboss",
             "level": 6,
             "name": "Mini Boss L6: Zeppelin",
-            "x": float(width - 250),
-            "y": 96.0,
+            "x": -260.0,
+            "y": 120.0,
             "w": 220,
             "h": 108,
-            "vx": -1.9,
-            "vy": 0.9,
-            "min_x": float(width - 330),
-            "max_x": float(width - 54),
+            "vx": 0.0,
+            "vy": 0.0,
+            "min_x": 56.0,
+            "max_x": float(width - 256),
             "min_y": 68.0,
             "max_y": 164.0,
+            "phase": "approach",
+            "phase_started_ms": now,
+            "approach_duration_ms": ZEPPELIN_CITY_APPROACH_DURATION_MS,
+            "approach_from_x": -260.0,
+            "approach_to_x": float(width - 268),
+            "approach_from_y": 132.0,
+            "approach_to_y": 92.0,
+            "fight_vx": -1.9,
+            "fight_vy": 0.9,
             "hits_taken": 0,
             "hits_required": ZEPPELIN_MINIBOSS_HITS_REQUIRED,
             "meter_steps": ZEPPELIN_MINIBOSS_HITS_REQUIRED,
@@ -3630,6 +3758,21 @@ def draw_cactus_boss_arena(theme):
         fill(232, 208, 128)
         ellipse(light_x + jitter, light_y, 7 + int(flicker * 3), 7 + int(flicker * 3))
 
+    platform_rects = get_cactus_boss_platform_rects()
+    for platform_x, platform_y, platform_w, platform_h in platform_rects:
+        fill(118, 114, 120)
+        rect(platform_x - 10, platform_y + 4, platform_w + 20, platform_h + 12)
+        fill(156, 152, 158)
+        rect(platform_x, platform_y, platform_w, platform_h)
+        fill(178, 174, 180)
+        rect(platform_x + 10, platform_y + 2, platform_w - 20, 5)
+        fill(92, 92, 100)
+        rect(platform_x + 8, platform_y + platform_h, platform_w - 16, 5)
+
+        fill(132, 128, 136)
+        ellipse(platform_x + 18, platform_y + 4, 18, 10)
+        ellipse(platform_x + platform_w - 22, platform_y + 5, 20, 10)
+
     stroke(154, 154, 162)
     stroke_weight(2)
     line(0, GROUND_Y, width, GROUND_Y)
@@ -3669,7 +3812,9 @@ def draw_parallax_clouds(theme):
             ellipse(cloud_x - 22, base_y - 2, cloud_w - 26, 24)
 
 
-def draw_zeppelin_city_backdrop(theme, arena_mode=False):
+def draw_zeppelin_city_backdrop(theme, arena_mode=False, reveal_ratio=1.0):
+    reveal_ratio = max(0.0, min(1.0, reveal_ratio))
+    city_shift_x = (1.0 - reveal_ratio) * (width * 0.72)
     sky_top = (126, 184, 222) if arena_mode else (144, 198, 232)
     sky_mid = (176, 212, 236) if arena_mode else (192, 224, 242)
     sky_low = (222, 232, 214) if arena_mode else (230, 238, 220)
@@ -3680,21 +3825,30 @@ def draw_zeppelin_city_backdrop(theme, arena_mode=False):
     rect(0, 244, width, GROUND_Y - 244)
     draw_parallax_clouds(theme)
 
+    if reveal_ratio < 1.0:
+        haze_w = int((1.0 - reveal_ratio) * (width * 0.36))
+        if haze_w > 0:
+            fill(232, 238, 226)
+            rect(0, 0, haze_w, GROUND_Y)
+
+    def sx(value):
+        return value + city_shift_x
+
     fill(94, 102, 122)
-    rect(22, 212, 68, GROUND_Y - 212)
-    rect(106, 188, 84, GROUND_Y - 188)
-    rect(206, 226, 54, GROUND_Y - 226)
-    rect(282, 170, 112, GROUND_Y - 170)
-    rect(418, 202, 74, GROUND_Y - 202)
-    rect(514, 156, 96, GROUND_Y - 156)
-    rect(632, 214, 62, GROUND_Y - 214)
-    rect(710, 184, 82, GROUND_Y - 184)
+    rect(sx(22), 212, 68, GROUND_Y - 212)
+    rect(sx(106), 188, 84, GROUND_Y - 188)
+    rect(sx(206), 226, 54, GROUND_Y - 226)
+    rect(sx(282), 170, 112, GROUND_Y - 170)
+    rect(sx(418), 202, 74, GROUND_Y - 202)
+    rect(sx(514), 156, 96, GROUND_Y - 156)
+    rect(sx(632), 214, 62, GROUND_Y - 214)
+    rect(sx(710), 184, 82, GROUND_Y - 184)
 
     fill(72, 78, 98)
-    rect(128, 152, 18, 36)
-    rect(320, 122, 22, 48)
-    rect(548, 118, 22, 38)
-    rect(756, 148, 16, 36)
+    rect(sx(128), 152, 18, 36)
+    rect(sx(320), 122, 22, 48)
+    rect(sx(548), 118, 22, 38)
+    rect(sx(756), 148, 16, 36)
 
     fill(244, 220, 126)
     for window_x, window_y in (
@@ -3703,14 +3857,14 @@ def draw_zeppelin_city_backdrop(theme, arena_mode=False):
         (432, 222), (454, 222), (528, 182), (550, 182), (572, 182),
         (720, 206), (742, 206), (764, 206),
     ):
-        rect(window_x, window_y, 8, 12)
+        rect(sx(window_x), window_y, 8, 12)
 
     fill(116, 84, 58)
     rect(0, GROUND_Y, width, 40)
     fill(92, 68, 44)
     rect(0, GROUND_Y - 12, width, 12)
 
-    tower_x = width - 178
+    tower_x = sx(width - 178)
     fill(78, 72, 84)
     rect(tower_x, 126, 24, GROUND_Y - 126)
     rect(tower_x - 18, 172, 60, 18)
@@ -3721,9 +3875,9 @@ def draw_zeppelin_city_backdrop(theme, arena_mode=False):
     if arena_mode:
         search_phase = millis() / 520.0
         for beam_x, phase_offset in ((104, 0.0), (376, 1.8), (622, 3.5)):
-            beam_top_x = beam_x + math.sin(search_phase + phase_offset) * 40.0
+            beam_top_x = sx(beam_x) + math.sin(search_phase + phase_offset) * 40.0
             fill(238, 232, 188)
-            triangle(beam_x - 8, GROUND_Y, beam_x + 8, GROUND_Y, beam_top_x, 86)
+            triangle(sx(beam_x) - 8, GROUND_Y, sx(beam_x) + 8, GROUND_Y, beam_top_x, 86)
 
 
 def draw_zeppelin_boss_arena(theme):
@@ -3875,33 +4029,38 @@ def draw_boss_entity(boss):
         show_right_side = cactus_boss_showing_right_side(boss)
         visible_side = get_cactus_visible_side(boss)
         pose_arms_img = CACTUS_BOSS_ARMS_IMG if show_right_side else CACTUS_BOSS_ARMS_FLIPPED_IMG
-        sprite_draw_x = trunk_x - 26
-        sprite_draw_y = trunk_y - 10
-        sprite_draw_w = trunk_w + 28
+        pose_shift_x = 12 if show_right_side else -12
+        pose_shift_y = -2 if show_right_side else 2
+        sprite_draw_x = trunk_x - 26 + pose_shift_x
+        sprite_draw_y = trunk_y - 10 + pose_shift_y
+        sprite_draw_w = trunk_w + 22 if show_right_side else trunk_w + 32
         sprite_draw_h = trunk_h + 12
+
+        fill(52, 52, 58)
+        ellipse(x + (w // 2) + (8 if show_right_side else -8), y + h - 6, w - 24, 24)
 
         if CACTUS_BOSS_TRUNK_IMG is not None:
             trunk_img = CACTUS_BOSS_TRUNK_IMG if show_right_side else CACTUS_BOSS_TRUNK_FLIPPED_IMG
             image(trunk_img, sprite_draw_x, sprite_draw_y, sprite_draw_w, sprite_draw_h)
         else:
             fill(38, 126, 48)
-            rect(trunk_x - 6, trunk_y + 8, trunk_w + 8, trunk_h - 10)
-            arc(trunk_x + (trunk_w // 2) - 1, trunk_y + 8, trunk_w + 8, 28, PI, TWO_PI)
+            rect(trunk_x - 6 + pose_shift_x, trunk_y + 8 + pose_shift_y, trunk_w + 8, trunk_h - 10)
+            arc(trunk_x + (trunk_w // 2) - 1 + pose_shift_x, trunk_y + 8 + pose_shift_y, trunk_w + 8, 28, PI, TWO_PI)
 
             fill(58, 168, 70)
-            rect(trunk_x + 2, trunk_y + 14, trunk_w - 8, trunk_h - 22)
-            arc(trunk_x + (trunk_w // 2) - 2, trunk_y + 14, trunk_w - 8, 22, PI, TWO_PI)
+            rect(trunk_x + 2 + pose_shift_x, trunk_y + 14 + pose_shift_y, trunk_w - 8, trunk_h - 22)
+            arc(trunk_x + (trunk_w // 2) - 2 + pose_shift_x, trunk_y + 14 + pose_shift_y, trunk_w - 8, 22, PI, TWO_PI)
             fill(71, 186, 84)
-            rect(trunk_x + 12, trunk_y + 28, trunk_w - 32, trunk_h - 52)
-            arc(trunk_x + (trunk_w // 2) - 4, trunk_y + 28, trunk_w - 32, 18, PI, TWO_PI)
+            rect(trunk_x + 12 + pose_shift_x, trunk_y + 28 + pose_shift_y, trunk_w - 32, trunk_h - 52)
+            arc(trunk_x + (trunk_w // 2) - 4 + pose_shift_x, trunk_y + 28 + pose_shift_y, trunk_w - 32, 18, PI, TWO_PI)
 
             stroke(48, 145, 58)
             stroke_weight(2)
-            line(trunk_x + 18, trunk_y + 18, trunk_x + 18, trunk_y + trunk_h - 16)
-            line(trunk_x + trunk_w // 2, trunk_y + 16, trunk_x + trunk_w // 2, trunk_y + trunk_h - 14)
-            line(trunk_x + trunk_w - 22, trunk_y + 18, trunk_x + trunk_w - 22, trunk_y + trunk_h - 16)
+            line(trunk_x + 18 + pose_shift_x, trunk_y + 18 + pose_shift_y, trunk_x + 18 + pose_shift_x, trunk_y + trunk_h - 16 + pose_shift_y)
+            line(trunk_x + trunk_w // 2 + pose_shift_x, trunk_y + 16 + pose_shift_y, trunk_x + trunk_w // 2 + pose_shift_x, trunk_y + trunk_h - 14 + pose_shift_y)
+            line(trunk_x + trunk_w - 22 + pose_shift_x, trunk_y + 18 + pose_shift_y, trunk_x + trunk_w - 22 + pose_shift_x, trunk_y + trunk_h - 16 + pose_shift_y)
             no_stroke()
-            draw_cactus_spines(trunk_x + 4, trunk_y + 18, trunk_w - 12, trunk_h - 24, step_x=16, step_y=20)
+            draw_cactus_spines(trunk_x + 4 + pose_shift_x, trunk_y + 18 + pose_shift_y, trunk_w - 12, trunk_h - 24, step_x=16, step_y=20)
 
         branch_rects = get_cactus_branch_rects(boss)
         for idx, branch_hp in enumerate(boss["branch_hp"]):
@@ -4548,6 +4707,21 @@ def update_and_draw_boss_mode(theme, update_world=True):
                 boss["vy"] *= -1
         elif boss["type"] == "cactus_miniboss":
             boss["y"] = boss.get("ground_y", boss["y"])
+            platforms = get_cactus_boss_platform_rects()
+            landed = False
+            for platform_rect in platforms:
+                if apply_one_way_platform_collision(
+                    platform_rect,
+                    prev_player_x,
+                    prev_dino_y,
+                    prev_ducking,
+                    drop_if_unsupported=False,
+                ):
+                    landed = True
+                    break
+            if (not landed) and on_ground and dino_y < DINO_Y:
+                if not any(platform_supports_player(platform_rect) for platform_rect in platforms):
+                    on_ground = False
         else:
             update_final_boss_movement(boss, now)
 
@@ -4832,7 +5006,7 @@ def update_and_draw_flight_mode(theme, update_world=True):
     now = millis()
     boss = boss_state if boss_state is not None and boss_state.get("type") == "zeppelin_miniboss" else None
     if update_world:
-        # Movement in left half of the screen.
+        # During the zeppelin section the plane can roam the whole arena.
         if fly_left_pressed:
             flight_plane_x -= FLIGHT_PLANE_SPEED
         if fly_right_pressed:
@@ -4842,10 +5016,9 @@ def update_and_draw_flight_mode(theme, update_world=True):
         if fly_down_pressed:
             flight_plane_y += FLIGHT_PLANE_SPEED
 
-        plane_w = AIRPLANE_PICKUP_W
-        plane_h = AIRPLANE_PICKUP_H
-        flight_plane_x = max(20.0, min((width // 2) - plane_w - 10, flight_plane_x))
-        flight_plane_y = max(50.0, min(GROUND_Y - plane_h - 4, flight_plane_y))
+        min_plane_x, max_plane_x, min_plane_y, max_plane_y = get_flight_plane_bounds(has_boss=(boss is not None))
+        flight_plane_x = max(min_plane_x, min(max_plane_x, flight_plane_x))
+        flight_plane_y = max(min_plane_y, min(max_plane_y, flight_plane_y))
 
         if boss is None and now >= flight_pipe_spawn_due_ms:
             spawn_flight_pipe()
@@ -4862,7 +5035,7 @@ def update_and_draw_flight_mode(theme, update_world=True):
         if boss is None and current_level >= flight_mode_exit_level:
             if not boss_completed.get(6, False):
                 boss_state = spawn_boss_for_level(6)
-                boss_intro_until_ms = now + BOSS_INTRO_DURATION_MS
+                boss_intro_until_ms = 0
                 boss = boss_state
                 flight_pipes = []
             else:
@@ -4886,40 +5059,54 @@ def update_and_draw_flight_mode(theme, update_world=True):
                 break
 
         if boss is not None:
-            boss["x"] += boss.get("vx", 0.0)
-            boss["y"] += boss.get("vy", 0.0)
-            if boss["x"] <= boss["min_x"] or boss["x"] >= boss["max_x"]:
-                boss["vx"] *= -1
-            if boss["y"] <= boss["min_y"] or boss["y"] >= boss["max_y"]:
-                boss["vy"] *= -1
-            spawn_boss_attack_if_needed(boss)
-            update_enemy_projectiles(boss)
-            if game_over:
-                return
-            update_player_projectiles_against_boss(boss)
-            finish_boss_if_defeated(boss)
-            if not flight_mode:
-                return
-            if rects_overlap(get_flight_plane_rect(), get_boss_hitbox(boss)):
-                crash_flight_mode()
-                return
+            phase_completed = update_zeppelin_boss_phase(boss, now)
+            if phase_completed:
+                boss_intro_until_ms = now + BOSS_INTRO_DURATION_MS
+
+            if boss.get("phase") == "fight":
+                boss["x"] += boss.get("vx", 0.0)
+                boss["y"] += boss.get("vy", 0.0)
+                if boss["x"] <= boss["min_x"] or boss["x"] >= boss["max_x"]:
+                    boss["vx"] *= -1
+                if boss["y"] <= boss["min_y"] or boss["y"] >= boss["max_y"]:
+                    boss["vy"] *= -1
+                spawn_boss_attack_if_needed(boss)
+                update_enemy_projectiles(boss)
+                if game_over:
+                    return
+                update_player_projectiles_against_boss(boss)
+                finish_boss_if_defeated(boss)
+                if not flight_mode:
+                    return
+                if rects_overlap(get_flight_plane_rect(), get_boss_hitbox(boss)):
+                    crash_flight_mode()
+                    return
 
     if boss is not None:
-        draw_zeppelin_boss_arena(theme)
+        intro_progress = get_zeppelin_intro_progress(boss, now)
+        draw_zeppelin_city_backdrop(theme, arena_mode=(boss.get("phase") == "fight"), reveal_ratio=intro_progress)
+        stroke(86, 74, 60)
+        stroke_weight(2)
+        line(0, GROUND_Y, width, GROUND_Y)
+        no_stroke()
     else:
         draw_flight_pipes()
 
     if boss is not None:
         draw_boss_entity(boss)
-        draw_boss_meter(boss, theme)
-        for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
-            draw_projectile(projectile)
-        for projectile in iter_active_projectiles(player_projectiles):
-            draw_projectile(projectile)
-        draw_explosion_effects()
+        if boss.get("phase") == "fight":
+            draw_boss_meter(boss, theme)
+            for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
+                draw_projectile(projectile)
+            for projectile in iter_active_projectiles(player_projectiles):
+                draw_projectile(projectile)
+            draw_explosion_effects()
         fill(*theme["text"])
         text_size(16)
-        text("Weapon: Plane slingshot (SPACE)", 20, 66)
+        if boss.get("phase") == "fight":
+            text("Weapon: Plane slingshot (SPACE)", 20, 66)
+        else:
+            text("Fly into the city. The zeppelin is moving in...", 20, 66)
 
     if isDebugMode:
         plane_rect = get_flight_plane_rect()
@@ -4937,14 +5124,20 @@ def update_and_draw_flight_mode(theme, update_world=True):
             )
         no_stroke()
 
-    if boss is not None and millis() < boss_intro_until_ms:
+    if boss is not None and boss.get("phase") != "fight":
+        fill(255, 212, 78)
+        text_size(28)
+        text("Entering the city...", width // 2 - 118, 34)
+        text_size(20)
+        text("The zeppelin flies in from the left", width // 2 - 140, 62)
+    elif boss is not None and millis() < boss_intro_until_ms:
         fill(200, 40, 40)
         text_size(32)
         text("Mini boss: Zeppelin!", width // 2 - 142, 34)
     elif millis() < airplane_warning_until_ms and not game_over:
         fill(*theme["accent"])
         text_size(20)
-        text("Flight mode: stay left and dodge the pipes!", width // 2 - 170, 28)
+        text("Flight mode: dodge the pipes and get ready for the city!", width // 2 - 220, 28)
 
 
 def draw_rounded_rect_outline(x, y, w, h, radius, col, weight=2):
@@ -5370,9 +5563,9 @@ def draw_menu_character_card(idx, x, card_y, card_w, card_h, character_key, char
 
 def draw_character_select(theme):
     text_size(22)
-    fill(*theme["text"])
+    fill(*theme.get("menu_meta", theme["text"]))
     _, _, card_y, _, _ = get_character_select_layout()[0]
-    text("Choose character: left/right arrows", width // 2 - 185, card_y - 18)
+    text("Choose character: left/right arrows", width // 2 - 185, card_y - 22)
 
     pulse = (math.sin(millis() / 180.0) + 1.0) * 0.5
     pulse_pad = int(5 + pulse * 6)
@@ -5527,20 +5720,22 @@ def draw():
             draw_shop_screen(theme)
             draw_debug_overlay()
             return
-        menu_info_y = height // 2 - 34
-        fill(*theme["text"])
+        menu_meta_y = 112
+        menu_title_y = 196
+        menu_prompt_y = 236
+        fill(*theme.get("menu_meta", theme["text"]))
+        text_size(22)
+        text(f"Coin pouch: {coin_count}/{MAX_COIN_POUCH}", width // 2 - 122, menu_meta_y)
+        text(f"Highscore: {high_score}", width // 2 - 92, menu_meta_y + 30)
+        fill(*theme.get("menu_title", theme["accent"]))
         text_size(44)
-        text("Dino Game", width // 2 - 105, height // 2 - 55)
-        text_size(26)
-        text(f"Highscore: {high_score}", width // 2 - 92, height // 2 - 90)
-        text_size(22)
-        text(f"Coin pouch: {coin_count}/{MAX_COIN_POUCH}", width // 2 - 122, height // 2 - 122)
-        text_size(22)
-        text("Start: SPACE/A or click Start", width // 2 - 165, menu_info_y)
-        text("Jump: up arrow", width // 2 - 88, menu_info_y + 28)
-        text("Duck: down arrow (air = fast fall)", width // 2 - 190, menu_info_y + 56)
-        text("High jump: duck then jump within 0.5s", width // 2 - 220, menu_info_y + 84)
-        text("Info: I", width // 2 - 45, menu_info_y + 108)
+        text("Dino Game", width // 2 - 105, menu_title_y)
+        fill(*theme.get("menu_prompt", theme["text"]))
+        text_size(21)
+        text("Start: SPACE/A or click Start", width // 2 - 165, menu_prompt_y)
+        text("Jump: up arrow", width // 2 - 88, menu_prompt_y + 28)
+        text("Duck: down arrow (air = fast fall)", width // 2 - 190, menu_prompt_y + 56)
+        text("High jump: duck then jump within 0.5s", width // 2 - 220, menu_prompt_y + 84)
         draw_character_select(theme)
         if quit_confirm_active:
             fill(250, 250, 250)
@@ -6614,5 +6809,9 @@ if __name__ == "__main__" or IS_WEB:
     except KeyboardInterrupt:
         try:
             pygame.quit()
-        except Exception:
-            pass
+        except Exception as exc:
+            log_soft_exception(
+                "Failed to quit pygame after KeyboardInterrupt",
+                exc,
+                once_key="pygame_quit_keyboard_interrupt",
+            )

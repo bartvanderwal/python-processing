@@ -81,7 +81,10 @@ SSL_CERT_FILE="$($VENV_DIR/bin/python - <<'PY'
 try:
     import certifi
     print(certifi.where())
-except Exception:
+except Exception as exc:
+    import sys
+
+    print(f"[web-build] Failed to resolve certifi CA bundle: {exc.__class__.__name__}: {exc}", file=sys.stderr)
     print("")
 PY
 )"

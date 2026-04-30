@@ -2,6 +2,19 @@
 shared.py - Gedeelde functionaliteit voor input, info, quit, en geluid/muziek
 """
 from processing import *
+import sys
+import traceback
+
+
+def log_shared_exception(context, exc, *, once_key=None):
+    if not hasattr(log_shared_exception, "_seen_keys"):
+        log_shared_exception._seen_keys = set()
+    if once_key is not None:
+        if once_key in log_shared_exception._seen_keys:
+            return
+        log_shared_exception._seen_keys.add(once_key)
+    print(f"[shared] {context}: {exc.__class__.__name__}: {exc}", file=sys.stderr)
+    traceback.print_exception(type(exc), exc, exc.__traceback__)
 
 # --- Sound/Music State ---
 sound_enabled = True
@@ -82,8 +95,12 @@ def play_sound(path):
         try:
             sound = load_sound(path)
             sound.play()
-        except Exception:
-            pass
+        except Exception as exc:
+            log_shared_exception(
+                f"Failed to play sound '{path}'",
+                exc,
+                once_key=f"play_sound:{path}",
+            )
 
 # --- Muziek afspelen ---
 def play_music(path):
@@ -91,8 +108,12 @@ def play_music(path):
         try:
             music = load_sound(path)
             music.loop()
-        except Exception:
-            pass
+        except Exception as exc:
+            log_shared_exception(
+                f"Failed to play music '{path}'",
+                exc,
+                once_key=f"play_music:{path}",
+            )
 
 def stop_music():
     # Vereist dat je een referentie naar het muziek-object bewaart in je sketch
