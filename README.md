@@ -46,6 +46,14 @@ source .venv/bin/activate
 python dino_game.py
 ```
 
+### IDE gebruik
+
+Je kunt ook een IDE zoals [Thonny](https://thonny.org/) gebruiken.
+
+- Installeer daarin `pygame-ce` via de package manager, of gebruik de bestaande virtual environment van dit project.
+- Zorg dat de map `processing` beschikbaar is naast je programma, of in de gebruikte `site-packages`.
+- Voor deze repo is de veiligste route op macOS/Linux meestal gewoon `scripts/setup_venv.sh` en daarna draaien vanuit die omgeving.
+
 ### Flake8 handmatig draaien
 
 Als VS Code alleen toastmeldingen geeft, kun je Flake8 handmatig in de terminal draaien voor een volledig overzicht:
