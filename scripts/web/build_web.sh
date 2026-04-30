@@ -163,15 +163,9 @@ from pathlib import Path
 import re
 
 index = Path(r"$OUTPUT_DIR") / "index.html"
-base_path = str(r"$PUBLIC_BASE_PATH").strip()
-if base_path in ("", "/"):
-    base_prefix = ""
-else:
-    if not base_path.startswith("/"):
-        base_path = "/" + base_path
-    base_prefix = base_path.rstrip("/")
-
-cdn_prefix = f"{base_prefix}/cdn/0.9.3"
+# Use document-relative asset paths so the built site keeps working after
+# GitHub Pages project-path changes such as repository renames.
+cdn_prefix = "cdn/0.9.3"
 if index.exists():
     html = index.read_text(encoding="utf-8")
     html = html.replace('src="https://pygame-web.github.io/cdn/0.9.3/pythons.js"', f'src="{cdn_prefix}/pythons.js"')

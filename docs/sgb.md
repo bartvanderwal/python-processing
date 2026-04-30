@@ -211,11 +211,26 @@ Voor elk boss level stopt de endless-runner-flow kort in een statische hubscene.
 - Level 6 heeft een afwijkende minibossflow: aan het einde van de pipe/flappy flight-sectie verschijnt een Zeppelin in de lucht in plaats van een ground-hub.
 - Die Zeppelin wordt verslagen vanuit het eigen gele vliegtuig met een schot-aanval; de boss is dus onderdeel van `flight_mode` en niet van de gewone boss hub.
 
+### Zeppelin miniboss gedrag
+
+- De Zeppelin komt eerst de stad in tijdens een korte `approach`-fase; daarna start pas de echte fight-fase.
+- Tijdens deze encounter blijft de speler in `flight_mode`; er is dus geen ground reset of gewone boss hub tussen intro en gevecht.
+- De Zeppelin gebruikt een sprite-based render zodra `assets/zeppelin.png` beschikbaar is; alleen zonder asset blijft de oudere procedurale fallback actief.
+- Tijdens het gevecht kan het vliegtuig `3` treffers van zeppelin-projectiles opvangen voordat het neerstort.
+- Na de eerste treffer rookt het vliegtuig periodiek ongeveer elke `4` seconden.
+- Na de tweede treffer rookt het vliegtuig periodiek ongeveer elke `2` seconden.
+- De derde treffer door een zeppelin-projectile veroorzaakt een crash.
+- Een botsing met een pipe blijft direct fataal; pipe-collisions gebruiken dus geen hitpoint-systeem.
+- De post-boss overgang mag de luchtarena pas loslaten nadat de defeat/explosion sequence visueel klaar is.
+- Daarna moet de speler logisch de gewone wereld in vallen vanuit de actuele hoogte van het gevecht, niet via een kunstmatige teleport naar een vaste y-positie.
+
 Waarom:
 
 - De overgang van level 5 naar 6 bouwt al een luchtmechanic op; een luchtboss benut die bestaande skill direct.
 - Een ground-hub zou de opgebouwde flight-spanning onnodig onderbreken.
 - De speler moet dezelfde besturing en voertuigfantasie behouden tijdens het gevecht.
+- Een 3-hit vliegtuigstate maakt de fight minder binair en leesbaarder zonder pipes of arena-positioning ongevaarlijk te maken.
+- Rookfeedback maakt schade zichtbaar in de wereld zelf, in lijn met het principe dat gameplay-impact niet alleen in tekst mag zitten.
 
 ### Eindbaas level 10
 
@@ -224,6 +239,12 @@ Waarom:
 - De arena gebruikt een donkerdere, grijze grot-achtige achtergrond.
 - Grote vallende bommen tonen een gele landingsgloed zolang ze nog in de lucht zijn.
 - Zodra een grote bom ontploft, licht de cave kort op.
+
+### Documentatiegraad bosses
+
+- De globale boss-entrances en de specifieke level-6 en level-10 regels zijn nu beschreven in deze SGB.
+- Het volledige encountergedrag van de bird boss, cactus boss en final boss is nog niet overal systematisch uitgeschreven.
+- Verdere iteraties op boss-balans, arena-flow en visuele feedback horen die encounterregels later ook expliciet per boss aan te vullen.
 
 ## Level Systeem
 

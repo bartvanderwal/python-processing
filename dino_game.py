@@ -78,6 +78,10 @@ CROWN_BADGE_IMG = load_optional_image((
     "assets/kroon.png",
     "assets/pc/crown.png",
 ))
+ZEPPELIN_IMG = load_optional_image((
+    "assets/zeppelin.png",
+    "assets/npc/zeppelin.png",
+))
 BADGER_SHOP_IMG = load_optional_image((
     "assets/obstacles/badger-shop-crop.png",
     "assets/obstacles/badger-shop.png",
@@ -269,6 +273,11 @@ CACTUS_BRANCH_EXPLOSION_SIZE = 54
 CACTUS_BRANCH_EXPLOSION_LIFE_MS = 360
 BIRD_MINIBOSS_HITS_REQUIRED = 15
 ZEPPELIN_MINIBOSS_HITS_REQUIRED = 18
+FLIGHT_PLANE_MAX_HP = 3
+FLIGHT_PLANE_SMOKE_INTERVAL_MS = {
+    2: 4000,
+    1: 2000,
+}
 CACTUS_MINIBOSS_HITS_REQUIRED = 15
 COYOTE_TNT_THROW_SPEED = 6.8
 COYOTE_TNT_THROW_GRAVITY = 0.34
@@ -308,6 +317,7 @@ SHOP_SHIELD_MS = 5000
 SHOP_COIN_BOOST_MS = 60000
 SHOP_JUMP_SHOES_MS = 30000
 SHOP_JUMP_SHOES_FACTOR = 1.18
+SHOP_BOSS_WEAPON_COST = 24
 SHOP_NOTICE_MS = 1800
 PRE_BOSS_SCENE_NOTICE_MS = 2200
 COYOTE_CAVE_FLASH_MS = 180
@@ -810,6 +820,9 @@ flight_mode_entry_level = 1
 flight_mode_exit_level = 2
 flight_pipe_spawn_due_ms = 0
 flight_pipes = []
+flight_plane_hp = FLIGHT_PLANE_MAX_HP
+flight_plane_smoke_next_ms = 0
+flight_plane_smoke_puffs = []
 ground_pipe_gap_top = 220
 fly_left_pressed = False
 fly_right_pressed = False
@@ -854,6 +867,7 @@ credits_starfield = []
 credits_font_cache = {}
 pending_credits_after_victory = False
 mini_boss_defeat_sequences = []
+post_boss_transition = None
 is_fullscreen = False
 touch_active_button = None
 touch_ignore_next_click = False
@@ -903,6 +917,7 @@ def reset_game(show_splash=False):
     global credits_total_duration_ms, credits_starfield
     global pending_credits_after_victory
     global mini_boss_defeat_sequences
+    global post_boss_transition
     global pipe_crouch_sprite_cache
     global touch_active_button, touch_ignore_next_click
     global pending_high_jump_landing_roar
@@ -1020,6 +1035,7 @@ def reset_game(show_splash=False):
     credits_starfield = []
     pending_credits_after_victory = False
     mini_boss_defeat_sequences = []
+    post_boss_transition = None
     pipe_crouch_sprite_cache = {}
     touch_active_button = None
     touch_ignore_next_click = False
@@ -1571,6 +1587,14 @@ def is_intro_speech_playing():
         return False
 
 
+def toggle_intro_speech_playback():
+    if is_intro_speech_playing():
+        stop_intro_speech()
+        return False
+    play_intro_speech(force_restart=True)
+    return True
+
+
 def get_jump_sound(is_high_jump=False):
     if is_high_jump:
         if HIGH_JUMP_SOUND is not None:
@@ -2032,6 +2056,7 @@ def spawn_flight_pipe():
 def start_flight_mode():
     global flight_mode, flight_plane_x, flight_plane_y, flight_mode_entry_level, flight_mode_exit_level
     global flight_pipe_spawn_due_ms, flight_pipes
+    global flight_plane_hp, flight_plane_smoke_next_ms, flight_plane_smoke_puffs
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
     flight_mode = True
     flight_plane_x = 120.0
@@ -2040,6 +2065,9 @@ def start_flight_mode():
     flight_mode_exit_level = 7
     flight_pipe_spawn_due_ms = millis() + 400
     flight_pipes = []
+    flight_plane_hp = FLIGHT_PLANE_MAX_HP
+    flight_plane_smoke_next_ms = 0
+    flight_plane_smoke_puffs = []
     fly_left_pressed = False
     fly_right_pressed = False
     fly_up_pressed = False
@@ -2048,26 +2076,174 @@ def start_flight_mode():
 
 def end_flight_mode():
     global flight_mode, flight_pipes, flight_pipe_spawn_due_ms
+    global flight_plane_hp, flight_plane_smoke_next_ms, flight_plane_smoke_puffs
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
-    global dino_y, velocity_y, on_ground, is_ducking, is_fast_falling
+    global dino_y, velocity_y, on_ground, is_ducking, is_fast_falling, player_x
     flight_mode = False
     flight_pipes = []
     flight_pipe_spawn_due_ms = 0
+    flight_plane_hp = FLIGHT_PLANE_MAX_HP
+    flight_plane_smoke_next_ms = 0
+    flight_plane_smoke_puffs = []
     fly_left_pressed = False
     fly_right_pressed = False
     fly_up_pressed = False
     fly_down_pressed = False
-    dino_y = DINO_Y
+    player_x = float(flight_plane_x)
+    dino_y = float(flight_plane_y)
     velocity_y = 0
-    on_ground = True
+    on_ground = False
     is_ducking = False
     is_fast_falling = False
     spawn_obstacle()
 
 
+def begin_post_boss_fall_in(fall_x=None, fall_y=None):
+    global player_x, dino_y, velocity_y, on_ground, is_ducking, is_fast_falling
+    global boss_left_pressed, boss_right_pressed
+
+    resolved_x = player_x if fall_x is None else fall_x
+    resolved_y = dino_y if fall_y is None else fall_y
+    player_x = float(resolved_x)
+    dino_y = float(resolved_y)
+    velocity_y = 0
+    on_ground = not (dino_y < DINO_Y)
+    is_ducking = False
+    is_fast_falling = False
+    boss_left_pressed = False
+    boss_right_pressed = False
+    spawn_obstacle()
+
+
+def start_post_boss_transition(boss_snapshot):
+    global post_boss_transition
+    transition_player_x = player_x
+    transition_player_y = dino_y
+    if boss_snapshot.get("level") == 6 and flight_mode:
+        transition_player_x = flight_plane_x
+        transition_player_y = flight_plane_y
+    post_boss_transition = {
+        "level": int(boss_snapshot.get("level", 0)),
+        "type": boss_snapshot.get("type"),
+        "snapshot": dict(boss_snapshot),
+        "player_x": float(transition_player_x),
+        "player_y": float(transition_player_y),
+    }
+
+
+def resolve_post_boss_transition_if_ready():
+    global post_boss_transition
+    if post_boss_transition is None:
+        return False
+    if mini_boss_defeat_sequences or explosion_effects:
+        return False
+
+    transition_level = int(post_boss_transition.get("level", 0))
+    transition_player_x = float(post_boss_transition.get("player_x", player_x))
+    transition_player_y = float(post_boss_transition.get("player_y", dino_y))
+    post_boss_transition = None
+    if transition_level == 6:
+        end_flight_mode()
+    else:
+        begin_post_boss_fall_in(transition_player_x, transition_player_y)
+    return True
+
+
+def draw_post_boss_transition(theme):
+    transition = post_boss_transition
+    if transition is None:
+        return False
+
+    snapshot = transition.get("snapshot")
+    transition_type = transition.get("type")
+    if transition_type == "bird_miniboss":
+        draw_bird_boss_arena(theme)
+    elif transition_type == "cactus_miniboss":
+        draw_cactus_boss_arena(theme)
+    elif transition_type == "zeppelin_miniboss":
+        draw_zeppelin_boss_arena(theme)
+    else:
+        background(*theme["bg"])
+
+    if snapshot is not None:
+        draw_boss_entity(snapshot)
+    draw_main_character()
+    draw_explosion_effects()
+    draw_hud(theme, force_visible=True)
+    draw_touch_controls_overlay()
+    draw_debug_overlay()
+    return True
+
+
 def crash_flight_mode():
     apply_player_hit(CRASH_SOUND)
     end_flight_mode()
+
+
+def spawn_flight_plane_smoke_puff():
+    puff_x = flight_plane_x + 14
+    puff_y = flight_plane_y + (AIRPLANE_PICKUP_H * 0.58)
+    flight_plane_smoke_puffs.append({
+        "x": float(puff_x),
+        "y": float(puff_y),
+        "size": float(random(16, 24)),
+        "vx": float(random(-0.8, -0.2)),
+        "vy": float(random(-0.5, -0.15)),
+        "life_ms": int(random(900, 1300)),
+        "spawned_ms": millis(),
+    })
+    overflow = len(flight_plane_smoke_puffs) - 18
+    if overflow > 0:
+        del flight_plane_smoke_puffs[0:overflow]
+
+
+def register_flight_plane_damage_from_zeppelin():
+    global flight_plane_hp, flight_plane_smoke_next_ms, player_damage_cooldown_until_ms
+    now = millis()
+    if now < player_damage_cooldown_until_ms:
+        return False
+
+    flight_plane_hp = max(0, flight_plane_hp - 1)
+    player_damage_cooldown_until_ms = now + PLAYER_DAMAGE_COOLDOWN_MS
+    spawn_flight_plane_smoke_puff()
+    play_sfx(CRASH_SOUND)
+
+    if flight_plane_hp <= 0:
+        crash_flight_mode()
+        return True
+
+    smoke_interval = FLIGHT_PLANE_SMOKE_INTERVAL_MS.get(flight_plane_hp, 0)
+    flight_plane_smoke_next_ms = now + smoke_interval if smoke_interval > 0 else 0
+    return False
+
+
+def update_and_draw_flight_plane_smoke():
+    global flight_plane_smoke_next_ms
+    if flight_plane_hp < FLIGHT_PLANE_MAX_HP and flight_plane_hp > 0:
+        now = millis()
+        if flight_plane_smoke_next_ms > 0 and now >= flight_plane_smoke_next_ms:
+            spawn_flight_plane_smoke_puff()
+            smoke_interval = FLIGHT_PLANE_SMOKE_INTERVAL_MS.get(flight_plane_hp, 0)
+            flight_plane_smoke_next_ms = now + smoke_interval if smoke_interval > 0 else 0
+
+    if not flight_plane_smoke_puffs:
+        return
+
+    now = millis()
+    alive_puffs = []
+    for puff in flight_plane_smoke_puffs:
+        age = now - puff["spawned_ms"]
+        if age >= puff["life_ms"]:
+            continue
+        progress = max(0.0, min(1.0, age / max(1, puff["life_ms"])))
+        puff["x"] += puff["vx"]
+        puff["y"] += puff["vy"]
+        puff_size = puff["size"] * (1.0 + (progress * 0.7))
+        shade = int(142 + (46 * (1.0 - progress)))
+        fill(shade, shade, shade)
+        ellipse(int(puff["x"]), int(puff["y"]), int(puff_size), int(puff_size * 0.82))
+        alive_puffs.append(puff)
+    flight_plane_smoke_puffs[:] = alive_puffs
 
 
 def get_ground_pipe_rects(draw_x=None):
@@ -2331,6 +2507,34 @@ def get_theme():
     return CHARACTER_CONFIG[get_current_character_key()]["theme"]
 
 
+def get_boss_shop_target_level():
+    if pending_boss_shop_level > 0:
+        return pending_boss_shop_level
+    if pre_boss_scene_level > 0:
+        return pre_boss_scene_level
+    return 0
+
+
+def get_boss_weapon_shop_item():
+    weapon_label = get_player_weapon_profile()["label"]
+    target_level = get_boss_shop_target_level()
+    level_hint = f" for boss L{target_level}" if target_level > 0 else ""
+    return {
+        "key": "weapon_powerup",
+        "label": weapon_label,
+        "cost": SHOP_BOSS_WEAPON_COST,
+        "desc": f"Unlock {weapon_label.lower()}{level_hint}.",
+    }
+
+
+def get_active_shop_items():
+    items = list(SHOP_ITEMS)
+    target_level = get_boss_shop_target_level()
+    if target_level > 0 and not (weapon_powerup_ready and weapon_powerup_level == target_level):
+        items.append(get_boss_weapon_shop_item())
+    return items
+
+
 def set_shop_notice(message, duration_ms=SHOP_NOTICE_MS):
     global shop_notice_text, shop_notice_until_ms
     shop_notice_text = str(message)
@@ -2404,21 +2608,30 @@ def get_shop_overlay_layout():
     stall_w = 628
     stall_h = 246
     layout = []
-    if BADGER_SHOP_IMG is not None:
+    active_items = get_active_shop_items()
+    if BADGER_SHOP_IMG is not None and len(active_items) <= 4:
         icon_positions = (
             (stall_x + 84, stall_y + 136, 72, 60),
             (stall_x + 206, stall_y + 132, 72, 64),
             (stall_x + 326, stall_y + 134, 72, 60),
             (stall_x + 464, stall_y + 132, 88, 62),
         )
-    else:
+    elif BADGER_SHOP_IMG is not None:
         icon_positions = (
-            (stall_x + 118, stall_y + 78, 76, 76),
-            (stall_x + 244, stall_y + 58, 76, 76),
-            (stall_x + 378, stall_y + 78, 76, 76),
-            (stall_x + 504, stall_y + 58, 76, 76),
+            (stall_x + 44, stall_y + 134, 64, 58),
+            (stall_x + 158, stall_y + 130, 64, 62),
+            (stall_x + 274, stall_y + 132, 64, 60),
+            (stall_x + 390, stall_y + 130, 64, 62),
+            (stall_x + 506, stall_y + 132, 76, 60),
         )
-    for item, (icon_x, icon_y, icon_w, icon_h) in zip(SHOP_ITEMS, icon_positions):
+    else:
+        icon_positions = []
+        spacing = 112 if len(active_items) > 4 else 126
+        start_x = stall_x + (30 if len(active_items) > 4 else 118)
+        base_y = stall_y + 78
+        for idx in range(len(active_items)):
+            icon_positions.append((start_x + idx * spacing, base_y - (20 if idx % 2 else 0), 76, 76))
+    for item, (icon_x, icon_y, icon_w, icon_h) in zip(active_items, icon_positions):
         layout.append((item, icon_x, icon_y, icon_w, icon_h))
     return stall_x, stall_y, stall_w, stall_h, layout
 
@@ -2474,6 +2687,24 @@ def draw_shop_item_icon(item_key, x, y, size, theme):
         fill(*theme["text"])
         text_size(16)
         text("x2", px + 22, py + 64)
+        return
+    if item_key == "weapon_powerup":
+        profile = get_player_weapon_profile()
+        if profile["kind"] == "tnt":
+            fill(210, 35, 30)
+            rect(px + 14, py + 24, 34, 22)
+            fill(255, 220, 100)
+            rect(px + 44, py + 18, 4, 8)
+            return
+        if profile["kind"] == "fire":
+            fill(235, 85, 20)
+            rect(px + 12, py + 28, 38, 12)
+            fill(250, 200, 70)
+            rect(px + 22, py + 24, 16, 8)
+            return
+        fill(22, 22, 22)
+        rect(px + 12, py + 30, 40, 8)
+        rect(px + 28, py + 36, 8, 16)
         return
     fill(72, 166, 238)
     rect(px + 12, py + 36, 22, 16)
@@ -2843,18 +3074,20 @@ def get_shop_item_count(item_key):
         return shop_coin_boost_count
     if item_key == "jump_shoes":
         return shop_jump_shoes_count
+    if item_key == "weapon_powerup":
+        target_level = get_boss_shop_target_level()
+        return 1 if target_level > 0 and weapon_powerup_ready and weapon_powerup_level == target_level else 0
     return 0
 
 
 def get_shop_selection_count():
-    # 4 items + 1 Back button slot.
-    return len(SHOP_ITEMS) + 1
+    return len(get_active_shop_items()) + 1
 
 
 def move_shop_selection(key_code):
     global shop_selected_index
 
-    back_idx = len(SHOP_ITEMS)
+    back_idx = len(get_active_shop_items())
     if shop_selected_index < 0 or shop_selected_index > back_idx:
         shop_selected_index = 0
 
@@ -2872,12 +3105,13 @@ def move_shop_selection(key_code):
 
 
 def activate_shop_selection():
-    back_idx = len(SHOP_ITEMS)
+    active_items = get_active_shop_items()
+    back_idx = len(active_items)
     if shop_selected_index == back_idx:
         close_shop()
         return True
-    if 0 <= shop_selected_index < len(SHOP_ITEMS):
-        return buy_shop_item(SHOP_ITEMS[shop_selected_index]["key"])
+    if 0 <= shop_selected_index < len(active_items):
+        return buy_shop_item(active_items[shop_selected_index]["key"])
     return False
 
 
@@ -2897,16 +3131,29 @@ def add_shop_item(item_key, amount=1):
 
 
 def buy_shop_item(item_key):
-    global coin_count
-    item = next((it for it in SHOP_ITEMS if it["key"] == item_key), None)
+    global coin_count, weapon_powerup_ready, weapon_powerup_level, pending_weapon_powerup_level
+    item = next((it for it in get_active_shop_items() if it["key"] == item_key), None)
     if item is None:
         return False
+    if item_key == "weapon_powerup":
+        target_level = get_boss_shop_target_level()
+        if target_level <= 0:
+            set_shop_notice("Boss weapon only appears in boss prep shop.")
+            return False
+        if weapon_powerup_ready and weapon_powerup_level == target_level:
+            set_shop_notice(f"{item['label']} already ready.")
+            return False
     cost = int(item["cost"])
     if coin_count < cost:
         set_shop_notice("Not enough coins in pouch.")
         return False
     coin_count -= cost
-    add_shop_item(item_key, 1)
+    if item_key == "weapon_powerup":
+        weapon_powerup_ready = True
+        weapon_powerup_level = get_boss_shop_target_level()
+        pending_weapon_powerup_level = 0
+    else:
+        add_shop_item(item_key, 1)
     set_shop_notice(f"Purchased: {item['label']}")
     return True
 
@@ -4154,31 +4401,34 @@ def draw_boss_entity(boss):
         return
 
     if boss["type"] == "zeppelin_miniboss":
-        # Reference attribution for the zeppelin look used here:
-        # FreeSVG.org "Zeppelin" by j4p4n (Public Domain / CC0) https://freesvg.org/zeppelin
-        hull_x = x + 10
-        hull_y = y + 14
-        hull_w = w - 26
-        hull_h = h - 38
-        fill(198, 64, 54)
-        ellipse(hull_x + (hull_w * 0.5), hull_y + (hull_h * 0.44), hull_w, hull_h * 0.7)
-        fill(240, 226, 194)
-        ellipse(hull_x + (hull_w * 0.56), hull_y + (hull_h * 0.42), hull_w * 0.52, hull_h * 0.42)
-        fill(130, 36, 28)
-        rect(x + 30, y + h - 42, w - 92, 10)
-        fill(84, 64, 42)
-        rect(x + 54, y + h - 30, w - 144, 18)
-        fill(62, 62, 70)
-        rect(x + 92, y + h - 16, 16, 8)
-        rect(x + w - 118, y + h - 16, 16, 8)
-        fill(250, 214, 82)
-        rect(x + 82, y + h - 24, 8, 6)
-        rect(x + 104, y + h - 24, 8, 6)
-        rect(x + 126, y + h - 24, 8, 6)
-        fill(142, 42, 34)
-        triangle(x + w - 34, y + 38, x + w + 8, y + 52, x + w - 34, y + 66)
-        fill(220, 184, 94)
-        rect(x + w - 18, y + 46, 18, 10)
+        if ZEPPELIN_IMG is not None:
+            image(ZEPPELIN_IMG, x - 8, y + 2, w + 32, h + 14)
+        else:
+            # Reference attribution for the zeppelin look used here:
+            # FreeSVG.org "Zeppelin" by j4p4n (Public Domain / CC0) https://freesvg.org/zeppelin
+            hull_x = x + 10
+            hull_y = y + 14
+            hull_w = w - 26
+            hull_h = h - 38
+            fill(198, 64, 54)
+            ellipse(hull_x + (hull_w * 0.5), hull_y + (hull_h * 0.44), hull_w, hull_h * 0.7)
+            fill(240, 226, 194)
+            ellipse(hull_x + (hull_w * 0.56), hull_y + (hull_h * 0.42), hull_w * 0.52, hull_h * 0.42)
+            fill(130, 36, 28)
+            rect(x + 30, y + h - 42, w - 92, 10)
+            fill(84, 64, 42)
+            rect(x + 54, y + h - 30, w - 144, 18)
+            fill(62, 62, 70)
+            rect(x + 92, y + h - 16, 16, 8)
+            rect(x + w - 118, y + h - 16, 16, 8)
+            fill(250, 214, 82)
+            rect(x + 82, y + h - 24, 8, 6)
+            rect(x + 104, y + h - 24, 8, 6)
+            rect(x + 126, y + h - 24, 8, 6)
+            fill(142, 42, 34)
+            triangle(x + w - 34, y + 38, x + w + 8, y + 52, x + w - 34, y + 66)
+            fill(220, 184, 94)
+            rect(x + w - 18, y + 46, 18, 10)
         return
 
     # Final boss
@@ -4268,7 +4518,7 @@ def draw_boss_meter(boss, theme):
 
 def finish_boss_if_defeated(boss):
     global boss_state, score, weapon_powerup_ready, weapon_powerup_level, game_completed
-    global player_x, boss_left_pressed, boss_right_pressed
+    global boss_left_pressed, boss_right_pressed
     global final_boss_snapshot, final_boss_defeat_until_ms, final_boss_next_blast_ms
     global pending_credits_after_victory
     if boss["hits_taken"] < boss["hits_required"]:
@@ -4279,7 +4529,6 @@ def finish_boss_if_defeated(boss):
     boss_state = None
     weapon_powerup_ready = False
     weapon_powerup_level = 0
-    player_x = float(DINO_X)
     boss_left_pressed = False
     boss_right_pressed = False
     reset_projectile_pool(player_projectiles)
@@ -4297,8 +4546,8 @@ def finish_boss_if_defeated(boss):
             "until_ms": now + MINI_BOSS_DEFEAT_DURATION_MS,
             "next_blast_ms": now + MINI_BOSS_BLAST_INTERVAL_MS,
         })
+        start_post_boss_transition(boss_snapshot)
     if boss["level"] == 6:
-        end_flight_mode()
         return
     if boss["level"] >= 10:
         final_boss_snapshot = boss_snapshot
@@ -4308,7 +4557,8 @@ def finish_boss_if_defeated(boss):
         game_completed = True
         pending_credits_after_victory = True
         return
-    spawn_obstacle()
+    if boss["level"] >= 10:
+        return
 
 
 def update_enemy_projectiles(boss):
@@ -4423,7 +4673,10 @@ def update_enemy_projectiles(boss):
         projectile_rect = get_projectile_rect(projectile)
         if rects_overlap(projectile_rect, player_hitbox):
             projectile["active"] = False
-            apply_player_hit(CRASH_SOUND)
+            if flight_mode and boss.get("type") == "zeppelin_miniboss" and projectile.get("kind") == "zeppelin_bomb":
+                register_flight_plane_damage_from_zeppelin()
+            else:
+                apply_player_hit(CRASH_SOUND)
             return
         if projectile["x"] + projectile["w"] < -40:
             projectile["active"] = False
@@ -5154,6 +5407,8 @@ def update_and_draw_flight_mode(theme, update_world=True):
     else:
         draw_flight_pipes()
 
+    update_and_draw_flight_plane_smoke()
+
     if boss is not None:
         draw_boss_entity(boss)
         if boss.get("phase") == "fight":
@@ -5167,6 +5422,7 @@ def update_and_draw_flight_mode(theme, update_world=True):
         text_size(16)
         if boss.get("phase") == "fight":
             text("Weapon: Plane slingshot (SPACE)", 20, 66)
+            text(f"Plane HP: {flight_plane_hp}/{FLIGHT_PLANE_MAX_HP}", 20, 88)
         else:
             text("Fly into the city. The zeppelin is moving in...", 20, 66)
 
@@ -5400,6 +5656,111 @@ def get_shop_button_rect():
     return btn_x, btn_y + btn_h + 12, btn_w, btn_h
 
 
+def get_info_screen_action_layout():
+    panel_x = width - 280
+    panel_y = 210
+    button_w = 232
+    button_h = 40
+    gap = 12
+    return [
+        {"key": "debug", "label": "Debug mode", "x": panel_x, "y": panel_y, "w": button_w, "h": button_h},
+        {"key": "music", "label": "Music", "x": panel_x, "y": panel_y + (button_h + gap), "w": button_w, "h": button_h},
+        {"key": "sfx", "label": "SFX", "x": panel_x, "y": panel_y + ((button_h + gap) * 2), "w": button_w, "h": button_h},
+        {"key": "speech", "label": "Welcome speech", "x": panel_x, "y": panel_y + ((button_h + gap) * 3), "w": button_w, "h": button_h},
+        {"key": "back", "label": "Back", "x": panel_x, "y": panel_y + ((button_h + gap) * 4), "w": button_w, "h": button_h},
+    ]
+
+
+def get_info_screen_action_state(action_key):
+    if action_key == "debug":
+        return isDebugMode
+    if action_key == "music":
+        return shared.music_enabled
+    if action_key == "sfx":
+        return shared.sound_enabled
+    if action_key == "speech":
+        return is_intro_speech_playing()
+    return None
+
+
+def draw_info_screen_actions(theme):
+    fill(*theme["accent"])
+    text_size(18)
+    text("Touch options", width - 278, 186)
+
+    for action in get_info_screen_action_layout():
+        x = int(action["x"])
+        y = int(action["y"])
+        w = int(action["w"])
+        h = int(action["h"])
+        state = get_info_screen_action_state(action["key"])
+
+        fill(255, 255, 255)
+        no_stroke()
+        rect(x, y, w, h)
+        draw_rounded_rect_outline(x, y, w, h, 10, theme["accent"], 2)
+
+        fill(*theme["text"])
+        text_size(18)
+        text(action["label"], x + 14, y + 25)
+
+        if state is None:
+            continue
+
+        pill_w = 64
+        pill_h = 24
+        pill_x = x + w - pill_w - 12
+        pill_y = y + ((h - pill_h) // 2)
+        if state:
+            fill(96, 180, 110)
+        else:
+            fill(186, 194, 206)
+        rect(pill_x, pill_y, pill_w, pill_h)
+        fill(255 if state else 42, 255 if state else 50, 255 if state else 64)
+        text_size(14)
+        text("ON" if state else "OFF", pill_x + 17, pill_y + 16)
+
+
+def handle_info_screen_click(x, y):
+    global isDebugMode, debug_coin_pressed
+
+    for action in get_info_screen_action_layout():
+        if not point_in_rect(x, y, action["x"], action["y"], action["w"], action["h"]):
+            continue
+
+        action_key = action["key"]
+        if action_key == "back":
+            shared.show_info = False
+            stop_intro_speech()
+            update_background_music(force=True)
+            return True
+
+        if action_key == "debug":
+            isDebugMode = not isDebugMode
+            if not isDebugMode:
+                debug_coin_pressed = False
+            return True
+
+        if action_key == "music":
+            shared.music_enabled = not shared.music_enabled
+            update_background_music(force=True)
+            return True
+
+        if action_key == "sfx":
+            shared.sound_enabled = not shared.sound_enabled
+            if not shared.sound_enabled:
+                stop_intro_speech()
+            return True
+
+        if action_key == "speech":
+            if not shared.sound_enabled:
+                shared.sound_enabled = True
+            toggle_intro_speech_playback()
+            return True
+
+    return False
+
+
 def draw_start_button(theme):
     btn_x, btn_y, btn_w, btn_h = get_start_button_rect()
     fill(255, 255, 255)
@@ -5492,7 +5853,8 @@ def draw_shop_seller_with_tie(sx=26, sy=168):
 def draw_shop_screen(theme):
     global shop_selected_index
     stall_x, stall_y, stall_w, stall_h, item_layout = get_shop_overlay_layout()
-    back_selection_idx = len(SHOP_ITEMS)
+    active_items = get_active_shop_items()
+    back_selection_idx = len(active_items)
     if shop_selected_index < 0 or shop_selected_index > back_selection_idx:
         shop_selected_index = 0
     fill(*theme["text"])
@@ -5540,8 +5902,8 @@ def draw_shop_screen(theme):
     text_size(14)
     text("Choose an item on the counter with arrows, then press SPACE.", stall_x + 72, stall_y + stall_h + 26)
 
-    if 0 <= shop_selected_index < len(SHOP_ITEMS):
-        selected_item = SHOP_ITEMS[shop_selected_index]
+    if 0 <= shop_selected_index < len(active_items):
+        selected_item = active_items[shop_selected_index]
         owned_count = get_shop_item_count(selected_item["key"])
         text_size(18)
         text(
@@ -5771,6 +6133,7 @@ def draw():
         text(f"Speed: {speed_mult:.2f}x", 500, 148)
         text_size(16)
         text("L: level +1, Shift+L: level -1", 500, 176)
+        draw_info_screen_actions(theme)
         if millis() < screenshot_notice_until_ms:
             fill(30, 110, 30)
             text_size(14)
@@ -5840,6 +6203,16 @@ def draw():
         draw_hud(theme, force_visible=True)
         draw_touch_controls_overlay()
         draw_debug_overlay()
+        return
+
+    if post_boss_transition is not None:
+        if resolve_post_boss_transition_if_ready():
+            draw_main_character()
+            draw_hud(theme)
+            draw_touch_controls_overlay()
+            draw_debug_overlay()
+            return
+        draw_post_boss_transition(theme)
         return
 
     if flight_mode:
@@ -6347,10 +6720,7 @@ def press_touch_control(name):
         if shop_active:
             return True
         if game_over:
-            if isDebugMode:
-                save_character_checkpoint()
-            else:
-                save_character_checkpoint(level=1)
+            save_character_checkpoint()
             if active_character_key in CHARACTER_ORDER:
                 selected_character_idx = CHARACTER_ORDER.index(active_character_key)
             reset_game(show_splash=True)
@@ -6468,10 +6838,7 @@ def key_pressed():
 
     if pressed_key == "q" or effective_key_code == K_ESCAPE:
         if game_started:
-            if game_over and not isDebugMode:
-                save_character_checkpoint(level=1)
-            else:
-                save_character_checkpoint()
+            save_character_checkpoint()
             if active_character_key in CHARACTER_ORDER:
                 selected_character_idx = CHARACTER_ORDER.index(active_character_key)
             reset_game(show_splash=True)
@@ -6479,12 +6846,13 @@ def key_pressed():
             quit_confirm_active = True
         return
 
+    if not game_started and pressed_key == "w":
+        toggle_intro_speech_playback()
+        return
+
     if shared.show_info:
         if pressed_key == "w":
-            if is_intro_speech_playing():
-                stop_intro_speech()
-            else:
-                play_intro_speech(force_restart=True)
+            toggle_intro_speech_playback()
             return
         if pressed_key == "l":
             if key == "L":
@@ -6527,10 +6895,7 @@ def key_pressed():
         return
 
     if game_over and key == " ":
-        if isDebugMode:
-            save_character_checkpoint()
-        else:
-            save_character_checkpoint(level=1)
+        save_character_checkpoint()
         if active_character_key in CHARACTER_ORDER:
             selected_character_idx = CHARACTER_ORDER.index(active_character_key)
         reset_game(show_splash=True)
@@ -6671,6 +7036,7 @@ def mouse_clicked(x, y, button):
     if button != 1:
         return
     if shared.show_info:
+        handle_info_screen_click(x, y)
         return
 
     if shop_active:

@@ -10,9 +10,13 @@ import time
 import traceback
 try:
     import pygame
-except ModuleNotFoundError:
+except ModuleNotFoundError as exc:
+    missing_name = getattr(exc, "name", "pygame") or "pygame"
+    interpreter = sys.executable or "python"
     raise ModuleNotFoundError(
-        "Python-processing is gebaseerd op pygame-ce. Installeer met: pip install -r requirements.txt."
+        "Python-processing kon pygame-ce niet importeren via "
+        f"'{interpreter}'. Ontbrekende module: '{missing_name}'. "
+        "Gebruik de project-venv: '.venv/bin/python dino_game.py' of installeer dependencies in exact deze interpreter."
     ) from None
 
 from .core.constants import LEFT, RIGHT, CENTER, TOP, BOTTOM, BASELINE, OPEN, CHORD, PIE, PI, TWO_PI
