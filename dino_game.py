@@ -355,6 +355,7 @@ MENU_MUSIC_PATH = "assets/audio/loading-atmosphere.wav"
 GAME_MUSIC_PATH = "assets/audio/pixel-leap.wav"
 VICTORY_MUSIC_PATH = "assets/audio/victory-music.wav"
 CREDITS_MUSIC_PATH = "assets/audio/finish-game-music-victory.wav"
+APP_VERSION = "0.1.0"
 MUSIC_VOLUME = 0.35
 INTRO_SPEECH_PATH = "assets/audio/welcome-to-the-dino-game.mp3"
 CREDITS_DURATION_MS = 60000
@@ -368,10 +369,10 @@ GROUND_Y = 460
 CACTUS_GUIDE_LINE_Y = 443
 IS_WEB = sys.platform == "emscripten"
 TOUCH_CONTROLS_ENABLED = IS_WEB
-TOUCH_BTN_SIZE = 78
-TOUCH_BTN_GAP = 12
-TOUCH_ACTION_BTN_W = 132
-TOUCH_ACTION_BTN_H = 78
+TOUCH_BTN_SIZE = 104
+TOUCH_BTN_GAP = 16
+TOUCH_ACTION_BTN_W = 188
+TOUCH_ACTION_BTN_H = 104
 
 _logged_soft_exception_keys = set()
 
@@ -1644,7 +1645,7 @@ def setup():
     global TOUCH_CONTROLS_ENABLED
     size(BASE_GAME_WIDTH, BASE_GAME_HEIGHT)
     frame_rate(60)
-    title("Dino Game")
+    title(f"Dino Game v{APP_VERSION}")
     TOUCH_CONTROLS_ENABLED = detect_touch_controls_enabled()
     reset_game(show_splash=True)
 
@@ -6216,6 +6217,8 @@ def draw():
         text_size(22)
         text(f"Coin pouch: {coin_count}/{MAX_COIN_POUCH}", width // 2 - 122, menu_meta_y)
         text(f"Highscore: {high_score}", width // 2 - 92, menu_meta_y + 30)
+        text_size(16)
+        text(f"Version: v{APP_VERSION}", width // 2 - 68, menu_meta_y + 56)
         fill(*theme.get("menu_title", theme["accent"]))
         text_size(44)
         text("Dino Game", width // 2 - 105, menu_title_y)
@@ -6665,9 +6668,9 @@ def get_touch_control_names():
 
 def get_touch_controls_layout():
     names = set(get_touch_control_names())
-    side = max(44, min(TOUCH_BTN_SIZE, int(min(width, height) * 0.10)))
-    gap = max(7, min(TOUCH_BTN_GAP, int(side * 0.16)))
-    pad = max(8, int(side * 0.14))
+    side = max(72, max(TOUCH_BTN_SIZE, int(min(width, height) * 0.16)))
+    gap = max(10, max(TOUCH_BTN_GAP, int(side * 0.16)))
+    pad = max(12, int(side * 0.16))
     buttons = {}
 
     if "left" in names or "right" in names:
@@ -6687,8 +6690,8 @@ def get_touch_controls_layout():
         buttons["down"] = (controls_x, down_y, side, side)
 
     if "action" in names:
-        action_w = max(96, min(TOUCH_ACTION_BTN_W, int(side * 1.55)))
-        action_h = side
+        action_w = max(140, max(TOUCH_ACTION_BTN_W, int(side * 1.8)))
+        action_h = max(TOUCH_ACTION_BTN_H, side)
         action_x = width - action_w - pad
         action_y = height - action_h - pad
         if "left" not in names and "right" not in names:
@@ -6717,11 +6720,11 @@ def draw_touch_controls_overlay():
             fill(206, 214, 226)
         rect(int(bx), int(by), int(bw), int(bh))
         fill(22, 28, 42)
-        text_size(18 if name != "action" else 20)
-        tx = int(bx + (bw * 0.32))
-        ty = int(by + (bh * 0.62))
+        text_size(28 if name != "action" else 30)
+        tx = int(bx + (bw * 0.28))
+        ty = int(by + (bh * 0.63))
         if name == "action":
-            tx = int(bx + 18)
+            tx = int(bx + 26)
         text(labels[name], tx, ty)
 
 

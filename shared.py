@@ -16,12 +16,15 @@ def log_shared_exception(context, exc, *, once_key=None):
     print(f"[shared] {context}: {exc.__class__.__name__}: {exc}", file=sys.stderr)
     traceback.print_exception(type(exc), exc, exc.__traceback__)
 
+
 # --- Sound/Music State ---
 sound_enabled = True
 music_enabled = True
 
+
 # --- Info scherm ---
 show_info = False
+
 
 # --- Key handling ---
 def handle_common_keys(
@@ -50,6 +53,7 @@ def handle_common_keys(
         if sound_toggle_callback:
             sound_toggle_callback(sound_enabled)
 
+
 # --- Info scherm tekenen ---
 def draw_info_screen(info_text):
     background(245)
@@ -77,6 +81,7 @@ def draw_info_screen(info_text):
     text(f"SFX: {'on' if sound_enabled else 'off'}", 280, y + 24)
     text("Press i to return.", 110, y + 56)
 
+
 # --- Speaker icoon tekenen ---
 def draw_speaker_icon(x, y, enabled=True):
     # Simpel speaker icoon
@@ -84,10 +89,11 @@ def draw_speaker_icon(x, y, enabled=True):
     rect(x, y+8, 8, 16)
     triangle(x+8, y+8, x+20, y, x+20, y+32)
     if not enabled:
-        stroke(255,0,0)
+        stroke(255, 0, 0)
         stroke_weight(4)
         line(x+4, y+4, x+24, y+28)
         no_stroke()
+
 
 # --- Geluid afspelen ---
 def play_sound(path):
@@ -102,6 +108,7 @@ def play_sound(path):
                 once_key=f"play_sound:{path}",
             )
 
+
 # --- Muziek afspelen ---
 def play_music(path):
     if music_enabled:
@@ -114,6 +121,7 @@ def play_music(path):
                 exc,
                 once_key=f"play_music:{path}",
             )
+
 
 def stop_music():
     # Vereist dat je een referentie naar het muziek-object bewaart in je sketch

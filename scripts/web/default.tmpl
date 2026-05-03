@@ -6,8 +6,8 @@ Loading stage from stage.apk
     Template Version : 0.9.3
     Python  : 3.12
     CDN URL : https://pygame-web.github.io/cdn/0.9.3/
-    Screen  : 1280x720
-    Title   : stage
+    Screen  : 800x500
+    Title   : Dino Game
     Folder  : stage
     Authors : pgw
     SPDX-License-Identifier: cookiecutter.spdx
@@ -187,9 +187,9 @@ config = {
     cdn : "https://pygame-web.github.io/cdn/0.9.3/",
     autorun : 0,
     PYBUILD : "3.12",
-    fb_ar   :  1.77,
-    fb_width : "1280",
-    fb_height : "720"
+    fb_ar   :  1.6,
+    fb_width : "800",
+    fb_height : "500"
 }
 
 function show_infobox() {
@@ -209,11 +209,10 @@ function show_infobox() {
 
 </script>
 
-    <title>stage</title>
+    <title>Dino Game</title>
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="viewport" content="height=device-height, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes"/>
 
@@ -250,27 +249,37 @@ function show_infobox() {
 
         /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
         /* average size of droid screen 470dp x 320dp  */
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            background-color: #7f7f7f;
+        }
+
         canvas.emscripten {
             border: 0px none;
             background-color: transparent;
-            width: 100%;
-            height: 100%;
+            width: min(100vw, calc(100dvh * 1.6));
+            height: min(62.5vw, 100dvh);
+            max-width: 100vw;
+            max-height: 100dvh;
             z-index: 5;
-
             padding: 0;
-            margin: 0 auto;
+            margin: auto;
+            position: fixed;
+            inset: 0;
+            display: block;
+            object-fit: contain;
+        }
 
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            left: 0;
-            right: 0;
+        #canvas3d {
+            pointer-events: none;
         }
 
         body {
             font-family: arial;
-            margin: 0;
-            padding: none;
             background-color:powderblue;
         }
 
