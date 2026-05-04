@@ -243,6 +243,7 @@ def get_plane_frames_for_character(character_key):
 
 
 # Richtingsvarianten (naar rechts kijken) voor specifieke enemies/bosses.
+BIRD_LEFT_IMG = BIRD_IMG
 BIRD_RIGHT_IMG = transform.flip(BIRD_IMG, True, False)
 GIANT_DINO_RIGHT_IMG = transform.flip(DINO_IMG, True, False)
 GIANT_COWBOY_RIGHT_IMG = transform.flip(COWBOY_IMG, True, False)
@@ -287,8 +288,22 @@ WIND_SWIRL_MAX_FALL_SPEED = 1.6
 FLIGHT_PIPE_GAP_H = 150
 FLIGHT_PIPE_WIDTH = 72
 FLIGHT_PIPE_SPAWN_BASE_MS = 1500
+FLIGHT_PIPE_MIN_GAP_DELTA = 34
 FLIGHT_PLANE_SPEED = 5.0
 FLIGHT_PIPE_POINTS = 2
+FLIGHT_BIRD_W = 54
+FLIGHT_BIRD_H = 30
+FLIGHT_LEVEL5_BIRD_CHANCE_PCT = 42
+FLIGHT_LEVEL5_BIRD_EXTRA_SPEED = 1.35
+FLIGHT_CAVE_GAP_SWAY_SPEED = 0.42
+FLIGHT_CAVE_GAP_SWAY_RANGE = 42
+FLIGHT_CAVE_DROP_CHANCE_PCT = 34
+FLIGHT_CAVE_TREMOR_MS = 520
+FLIGHT_CAVE_FALL_CHUNK_W = 26
+FLIGHT_CAVE_FALL_CHUNK_H = 26
+FLIGHT_CAVE_FALL_CHUNK_GRAVITY = 0.34
+ZEPPELIN_SMOKE_INTERVAL_MS = 1200
+ZEPPELIN_EXPLOSION_INTERVAL_MS = 4000
 ZEPPELIN_CITY_APPROACH_DURATION_MS = 2400
 AIRPLANE_PICKUP_W = 104
 AIRPLANE_PICKUP_H = 40
@@ -347,7 +362,9 @@ MAX_ACTIVE_EXPLOSIONS = 72
 CACTUS_BRANCH_EXPLOSION_SIZE = 54
 CACTUS_BRANCH_EXPLOSION_LIFE_MS = 360
 BIRD_MINIBOSS_HITS_REQUIRED = 15
+BIRD_BOSS_EXIT_OBSTACLES = 4
 ZEPPELIN_MINIBOSS_HITS_REQUIRED = 18
+OBSTACLE_GATED_BOSS_LEVELS = (4, 5)
 FLIGHT_PLANE_MAX_HP = 3
 FLIGHT_PLANE_SMOKE_INTERVAL_MS = {
     2: 4000,
@@ -370,7 +387,7 @@ FINAL_BOSS_DEFAULT_HITS_REQUIRED = 35
 COYOTE_HITS_REQUIRED = COYOTE_BIG_BOMB_RETURNS_REQUIRED * COYOTE_BIG_BOMB_BOSS_DAMAGE
 BOSS_REWARD_POINTS = {
     4: BIRD_MINIBOSS_HITS_REQUIRED,
-    6: ZEPPELIN_MINIBOSS_HITS_REQUIRED,
+    5: ZEPPELIN_MINIBOSS_HITS_REQUIRED,
     7: CACTUS_MINIBOSS_HITS_REQUIRED,
     10: FINAL_BOSS_DEFAULT_HITS_REQUIRED,
 }
@@ -430,7 +447,7 @@ CREDITS_MUSIC_PATH = FINAL_VICTORY_MUSIC_PATH
 # Mini-boss stinger attribution lives in code and credits so the source stays
 # traceable even if asset filenames change later.
 MINI_BOSS_VICTORY_SOUND_PATH = "assets/audio/pixabay-mini-boss-tadaa.mp3"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 MUSIC_VOLUME = 0.35
 INTRO_SPEECH_PATH = "assets/audio/welcome-to-the-dino-game.mp3"
 CREDITS_DURATION_MS = 60000
@@ -449,6 +466,8 @@ TOUCH_BTN_SIZE = 104
 TOUCH_BTN_GAP = 16
 TOUCH_ACTION_BTN_W = 188
 TOUCH_ACTION_BTN_H = 104
+TOUCH_PHONE_BREAKPOINT_W = 560
+TOUCH_PHONE_BREAKPOINT_H = 880
 
 _logged_soft_exception_keys = set()
 
@@ -541,7 +560,7 @@ def detect_touch_controls_enabled():
 
 
 # Progression per level: first chapter = 6 cleared obstacles, then +3 obstacles each chapter.
-LEVEL_OBSTACLE_REQUIREMENTS = [6, 9, 12, 15, 18, 21, 24, 27, 30, 33]
+LEVEL_OBSTACLE_REQUIREMENTS = [6, 9, 12, 15, 18, 21, 24, 24, 27, 30]
 LEVEL_OBSTACLE_TOTAL_THRESHOLDS = []
 _level_total = 0
 for _obstacles_needed in LEVEL_OBSTACLE_REQUIREMENTS:
@@ -561,10 +580,10 @@ LEVEL_NAMES = {
     3: "High Jump Ridge",
     4: "Bird Boss Canyon",
     5: "Fly away",
-    6: "Storm track",
+    6: "Blue Caverns",
     7: "Cactus Fortress",
     8: "Wild Flats",
-    9: "Last Stretch",
+    9: "Bird Storm",
     10: "Giant Town",
 }
 
@@ -600,13 +619,13 @@ LEVEL_SCRIPTED_OBSTACLE_PATTERNS = {
     ],
     8: [
         "cactus_low", "snake", "cactus_high", "bird_low",
-        "cactus_low", "cactus_tower", "snake", "bird_low",
+        "cactus_low", "cactus_tower", "snake", "bird_swarm",
         "cactus_high", "cactus_low",
     ],
     9: [
-        "cactus_low", "snake", "cactus_high", "bird_low",
+        "cactus_low", "snake", "cactus_high", "bird_swarm",
         "cactus_low", "snake", "cactus_tower", "bird_low",
-        "cactus_low", "snake", "cactus_high", "cactus_low",
+        "bird_swarm", "snake", "cactus_high", "cactus_low",
     ],
     10: [
         "cactus_high", "snake", "bird_low", "cactus_tower",
@@ -718,6 +737,15 @@ OBSTACLE_CONFIG = {
         "y": 390,
         "hitbox_insets": (8, 8, 6, 6),
         "points": 3,
+        "requires_duck_score": True,
+    },
+    "bird_swarm": {
+        "img": None,
+        "w": 156,
+        "h": 72,
+        "y": 348,
+        "hitbox_insets": (12, 12, 8, 8),
+        "points": 6,
         "requires_duck_score": True,
     },
     "airplane_pickup": {
@@ -852,10 +880,15 @@ player_x = float(DINO_X)
 JUMP_SOUND = None
 HIGH_JUMP_SOUND = None
 WEEH_SOUND = None
+COWBOY_HIGH_JUMP_SOUND = None
 DINO_ROAR_SOUND = None
 PIPE_ENTRY_SOUND = None
 CRASH_SOUND = None
+FLIGHT_CRASH_SOUND = None
 HISS_SOUND = None
+PLAYER_DEATH_SOUND = None
+FALL_IMPACT_SOUND = None
+BIRD_BOSS_FALL_SOUND = None
 SPLASH_SOUND = None
 FIRE_PLAYER_SOUND = None
 FIRE_ENEMY_SOUND = None
@@ -924,6 +957,9 @@ flight_mode_entry_level = 1
 flight_mode_exit_level = 2
 flight_pipe_spawn_due_ms = 0
 flight_pipes = []
+flight_birds = []
+last_flight_gap_top = 0
+flight_level5_double_bird_spawned = False
 flight_plane_hp = FLIGHT_PLANE_MAX_HP
 flight_plane_smoke_next_ms = 0
 flight_plane_smoke_puffs = []
@@ -938,6 +974,7 @@ flight_crash_velocity_y = 0.0
 flight_crash_landed_until_ms = 0
 flight_crash_plane_frame = None
 flight_crash_plane_rect = (0.0, 0.0, AIRPLANE_PICKUP_W, AIRPLANE_PICKUP_H)
+flight_crash_wreck_visible = False
 boss_left_pressed = False
 boss_right_pressed = False
 snake_hiss_played_for_current = False
@@ -947,10 +984,11 @@ boss_state = None
 boss_intro_until_ms = 0
 boss_completed = {
     4: False,
-    6: False,
+    5: False,
     7: False,
     10: False,
 }
+bird_boss_exit_obstacles_remaining = 0
 current_music_mode = None
 player_max_hp = 1
 player_hp = 1
@@ -1010,11 +1048,13 @@ def reset_game(show_splash=False):
     global pending_weapon_powerup_level, weapon_powerup_ready, weapon_powerup_level
     global coin_spawn_y
     global flight_mode, flight_plane_x, flight_plane_y, flight_mode_entry_level, flight_mode_exit_level
-    global flight_pipe_spawn_due_ms, flight_pipes, ground_pipe_gap_top
+    global flight_pipe_spawn_due_ms, flight_pipes, flight_birds, last_flight_gap_top
+    global flight_level5_double_bird_spawned, ground_pipe_gap_top
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
     global flight_crash_active, flight_crash_rotation_deg, flight_crash_velocity_y
     global flight_crash_landed_until_ms
     global flight_crash_plane_frame, flight_crash_plane_rect
+    global flight_crash_wreck_visible
     global boss_left_pressed, boss_right_pressed
     global snake_hiss_played_for_current
     global player_projectiles, player_shot_cooldown_until_ms
@@ -1104,6 +1144,9 @@ def reset_game(show_splash=False):
     flight_mode_exit_level = 2
     flight_pipe_spawn_due_ms = 0
     flight_pipes = []
+    flight_birds = []
+    last_flight_gap_top = 0
+    flight_level5_double_bird_spawned = False
     ground_pipe_gap_top = 220
     fly_left_pressed = False
     fly_right_pressed = False
@@ -1115,6 +1158,7 @@ def reset_game(show_splash=False):
     flight_crash_landed_until_ms = 0
     flight_crash_plane_frame = None
     flight_crash_plane_rect = (0.0, 0.0, AIRPLANE_PICKUP_W, AIRPLANE_PICKUP_H)
+    flight_crash_wreck_visible = False
     boss_left_pressed = False
     boss_right_pressed = False
     snake_hiss_played_for_current = False
@@ -1124,7 +1168,7 @@ def reset_game(show_splash=False):
     boss_intro_until_ms = 0
     boss_completed = {
         4: False,
-        6: False,
+        5: False,
         7: False,
         10: False,
     }
@@ -1594,6 +1638,21 @@ def play_sfx(sound):
         )
 
 
+def play_sfx_limited(sound, maxtime_ms=0, fade_ms=0):
+    if sound is None:
+        return
+    if not shared.sound_enabled:
+        return
+    try:
+        sound.play(maxtime=max(0, int(maxtime_ms)), fade_ms=max(0, int(fade_ms)))
+    except Exception as exc:
+        log_soft_exception(
+            "Failed to play limited sound effect",
+            exc,
+            once_key="play_sfx_limited",
+        )
+
+
 def make_pipe_entry_sound():
     try:
         init_info = mixer.get_init()
@@ -1739,9 +1798,12 @@ def toggle_intro_speech_playback():
 
 
 def get_jump_sound(is_high_jump=False):
-    if get_current_character_key() == "roadrunner" and WEEH_SOUND is not None:
+    character_key = get_current_character_key()
+    if character_key == "roadrunner" and WEEH_SOUND is not None:
         return WEEH_SOUND
     if is_high_jump:
+        if character_key == "cowboy" and COWBOY_HIGH_JUMP_SOUND is not None:
+            return COWBOY_HIGH_JUMP_SOUND
         if HIGH_JUMP_SOUND is not None:
             return HIGH_JUMP_SOUND
     return JUMP_SOUND
@@ -1757,8 +1819,8 @@ def play_pending_high_jump_landing_roar():
 
 
 def setup():
-    global JUMP_SOUND, HIGH_JUMP_SOUND, WEEH_SOUND, DINO_ROAR_SOUND, PIPE_ENTRY_SOUND, CRASH_SOUND, HISS_SOUND
-    global SPLASH_SOUND, FIRE_PLAYER_SOUND, FIRE_ENEMY_SOUND
+    global JUMP_SOUND, HIGH_JUMP_SOUND, WEEH_SOUND, COWBOY_HIGH_JUMP_SOUND, DINO_ROAR_SOUND, PIPE_ENTRY_SOUND, CRASH_SOUND, FLIGHT_CRASH_SOUND, HISS_SOUND, PLAYER_DEATH_SOUND, FALL_IMPACT_SOUND, BIRD_BOSS_FALL_SOUND
+    global FIRE_PLAYER_SOUND, FIRE_ENEMY_SOUND
     global BOSS_EXPLOSION_SOUND, COIN_SOUND, MINI_BOSS_VICTORY_SOUND, INTRO_SPEECH_SOUND
     global TOUCH_CONTROLS_ENABLED
     size(BASE_GAME_WIDTH, BASE_GAME_HEIGHT)
@@ -1781,13 +1843,24 @@ def setup():
     JUMP_SOUND = load_sound_or_none("assets/audio/jump.wav")
     HIGH_JUMP_SOUND = make_high_jump_sound()
     WEEH_SOUND = load_sound_or_none("assets/audio/weeh.wav")
+    COWBOY_HIGH_JUMP_SOUND = load_sound_or_none("assets/audio/floraphonic-cute-character-wee-1-188162.mp3")
     DINO_ROAR_SOUND = load_sound_or_none("assets/audio/roaarr.wav")
 
     PIPE_ENTRY_SOUND = make_pipe_entry_sound()
 
     CRASH_SOUND = load_sound_or_none("assets/audio/crash.wav")
+    FLIGHT_CRASH_SOUND = load_sound_or_none("assets/audio/49053354-cartoon-fall-318229.mp3")
     HISS_SOUND = load_sound_or_none("assets/audio/hiss.wav")
-    SPLASH_SOUND = load_sound_or_none("assets/audio/splash.wav")
+    PLAYER_DEATH_SOUND = load_sound_or_none("assets/audio/universfield-character-falling-on-ground-250069.mp3")
+    FALL_IMPACT_SOUND = load_sound_or_none("assets/audio/universfield-giant-fall-impact-352446.mp3")
+    bird_boss_fall_path = pick_existing_runtime_asset_path(
+        [
+            "assets/audio/soundreality-fall-217900.mp3",
+            "assets/soundreality-fall-217900.mp3",
+        ],
+        fallback_path="assets/soundreality-fall-217900.mp3",
+    )
+    BIRD_BOSS_FALL_SOUND = load_sound_or_none(bird_boss_fall_path)
     FIRE_PLAYER_SOUND = load_sound_or_none("assets/audio/fire-player.wav")
     FIRE_ENEMY_SOUND = load_sound_or_none("assets/audio/fire-enemy.wav")
     BOSS_EXPLOSION_SOUND = load_sound_or_none("assets/audio/boss-explosion.wav")
@@ -2189,29 +2262,190 @@ def update_zeppelin_boss_phase(boss, now):
 
 
 def spawn_flight_pipe():
-    gap_top = int(random(90, GROUND_Y - FLIGHT_PIPE_GAP_H - 50))
-    flight_pipes.append({
-        "x": width + 20,
+    global last_flight_gap_top, flight_level5_double_bird_spawned
+
+    min_gap_top = 90
+    max_gap_top = GROUND_Y - FLIGHT_PIPE_GAP_H - 50
+    if last_flight_gap_top <= 0:
+        gap_top = int(random(min_gap_top, max_gap_top))
+    else:
+        gap_top = last_flight_gap_top
+        for _ in range(6):
+            candidate = int(random(min_gap_top, max_gap_top))
+            if abs(candidate - last_flight_gap_top) >= FLIGHT_PIPE_MIN_GAP_DELTA:
+                gap_top = candidate
+                break
+        if gap_top == last_flight_gap_top:
+            midpoint = (min_gap_top + max_gap_top) // 2
+            if last_flight_gap_top <= midpoint:
+                gap_top = min(max_gap_top, last_flight_gap_top + FLIGHT_PIPE_MIN_GAP_DELTA)
+            else:
+                gap_top = max(min_gap_top, last_flight_gap_top - FLIGHT_PIPE_MIN_GAP_DELTA)
+
+    spawn_x = width + 20
+    hazard = {
+        "x": spawn_x,
         "gap_top": gap_top,
         "passed": False,
+        "style": "pipe",
+        "gap_v": 0.0,
+        "gap_min": gap_top,
+        "gap_max": gap_top,
+        "drop_enabled": False,
+        "drop_trigger_x": -9999.0,
+        "tremor_until_ms": 0,
+        "fall_chunk": None,
+    }
+    if current_level == 6:
+        hazard["style"] = "cave"
+        hazard["gap_min"] = max(76, gap_top - FLIGHT_CAVE_GAP_SWAY_RANGE)
+        hazard["gap_max"] = min(GROUND_Y - FLIGHT_PIPE_GAP_H - 32, gap_top + FLIGHT_CAVE_GAP_SWAY_RANGE)
+        hazard["gap_v"] = random(-FLIGHT_CAVE_GAP_SWAY_SPEED, FLIGHT_CAVE_GAP_SWAY_SPEED)
+        if abs(hazard["gap_v"]) < 0.16:
+            hazard["gap_v"] = FLIGHT_CAVE_GAP_SWAY_SPEED if hazard["gap_v"] >= 0 else -FLIGHT_CAVE_GAP_SWAY_SPEED
+        hazard["drop_enabled"] = int(random(0, 100)) < FLIGHT_CAVE_DROP_CHANCE_PCT
+        hazard["drop_trigger_x"] = float(random(220, width - 120))
+    flight_pipes.append(hazard)
+    last_flight_gap_top = gap_top
+
+    if current_level == 5:
+        remaining_until_level_6 = max(0, get_level_total_obstacle_count(5) - obstacles_cleared)
+        if remaining_until_level_6 <= 2 and not flight_level5_double_bird_spawned:
+            spawn_level5_flight_bird(gap_top, spawn_x + 102, lane="top")
+            spawn_level5_flight_bird(gap_top, spawn_x + 160, lane="bottom")
+            flight_level5_double_bird_spawned = True
+        elif int(random(0, 100)) < FLIGHT_LEVEL5_BIRD_CHANCE_PCT:
+            lane = "top" if int(random(0, 100)) < 50 else "bottom"
+            spawn_level5_flight_bird(gap_top, spawn_x + 120, lane=lane)
+
+
+def spawn_level5_flight_bird(gap_top, spawn_x, lane="top"):
+    lane = "top" if lane == "top" else "bottom"
+    if lane == "top":
+        bird_y = gap_top + 10
+    else:
+        bird_y = gap_top + FLIGHT_PIPE_GAP_H - FLIGHT_BIRD_H - 10
+    flight_birds.append({
+        "x": float(spawn_x),
+        "y": float(bird_y),
+        "w": FLIGHT_BIRD_W,
+        "h": FLIGHT_BIRD_H,
+        "vx": float(FLIGHT_LEVEL5_BIRD_EXTRA_SPEED),
     })
+
+
+def update_flight_cave_hazard(hazard, now):
+    if hazard.get("style") != "cave":
+        return
+
+    gap_top = float(hazard["gap_top"]) + float(hazard.get("gap_v", 0.0))
+    gap_min = float(hazard.get("gap_min", hazard["gap_top"]))
+    gap_max = float(hazard.get("gap_max", hazard["gap_top"]))
+    gap_v = float(hazard.get("gap_v", 0.0))
+    if gap_top <= gap_min or gap_top >= gap_max:
+        gap_top = max(gap_min, min(gap_max, gap_top))
+        gap_v *= -1.0
+    hazard["gap_top"] = gap_top
+    hazard["gap_v"] = gap_v
+
+    if not hazard.get("drop_enabled"):
+        return
+
+    tremor_until_ms = int(hazard.get("tremor_until_ms", 0) or 0)
+    if tremor_until_ms == 0 and hazard["x"] <= hazard.get("drop_trigger_x", -9999):
+        hazard["tremor_until_ms"] = now + FLIGHT_CAVE_TREMOR_MS
+        return
+
+    if tremor_until_ms > 0 and now >= tremor_until_ms and hazard.get("fall_chunk") is None:
+        hazard["tremor_until_ms"] = -1
+        hazard["fall_chunk"] = {
+            "x": float(hazard["x"] + 20),
+            "y": float(max(20, hazard["gap_top"] - FLIGHT_CAVE_FALL_CHUNK_H)),
+            "w": FLIGHT_CAVE_FALL_CHUNK_W,
+            "h": FLIGHT_CAVE_FALL_CHUNK_H,
+            "vy": 1.2,
+        }
+
+    chunk = hazard.get("fall_chunk")
+    if chunk is None:
+        return
+
+    chunk["x"] = float(hazard["x"] + 20)
+    chunk["y"] += float(chunk["vy"])
+    chunk["vy"] += FLIGHT_CAVE_FALL_CHUNK_GRAVITY
+    if chunk["y"] > GROUND_Y + 60:
+        hazard["fall_chunk"] = None
+
+
+def get_flight_hazard_rects(hazard):
+    gap_top = float(hazard["gap_top"])
+    top_rect = (hazard["x"], 0.0, FLIGHT_PIPE_WIDTH, gap_top)
+    bottom_y = gap_top + FLIGHT_PIPE_GAP_H
+    bottom_rect = (
+        hazard["x"],
+        bottom_y,
+        FLIGHT_PIPE_WIDTH,
+        max(0.0, GROUND_Y - bottom_y),
+    )
+    rects = [top_rect, bottom_rect]
+    chunk = hazard.get("fall_chunk")
+    if chunk is not None:
+        rects.append((chunk["x"], chunk["y"], chunk["w"], chunk["h"]))
+    return rects
+
+
+def draw_cave_spire(x, y, w, h, upside_down=True, shake_x=0.0):
+    if h <= 0 or w <= 0:
+        return
+    px = int(x + shake_x)
+    py = int(y)
+    pw = int(w)
+    ph = int(h)
+    lip_h = min(18, max(8, int(ph * 0.18)))
+
+    fill(74, 132, 206)
+    rect(px + 8, py, max(8, pw - 16), ph)
+    fill(118, 174, 232)
+    rect(px + 4, py, max(10, pw - 8), lip_h)
+    fill(42, 88, 164)
+    spike_count = 4
+    spike_w = pw / spike_count
+    for idx in range(spike_count):
+        sx = px + int(idx * spike_w)
+        sw = int(spike_w) + 2
+        if upside_down:
+            triangle(sx, py + lip_h, sx + sw, py + lip_h, sx + (sw // 2), py + ph)
+        else:
+            triangle(sx, py + ph - lip_h, sx + sw, py + ph - lip_h, sx + (sw // 2), py)
+
+
+def draw_flight_fall_chunk(chunk, shake_x=0.0):
+    fill(126, 194, 248)
+    rect(int(chunk["x"] + shake_x), int(chunk["y"]), int(chunk["w"]), int(chunk["h"]))
+    fill(56, 102, 182)
+    rect(int(chunk["x"] + shake_x + 3), int(chunk["y"] + 3), int(max(6, chunk["w"] - 6)), int(max(6, chunk["h"] - 6)))
 
 
 def start_flight_mode():
     global flight_mode, flight_plane_x, flight_plane_y, flight_mode_entry_level, flight_mode_exit_level
-    global flight_pipe_spawn_due_ms, flight_pipes
+    global flight_pipe_spawn_due_ms, flight_pipes, flight_birds, last_flight_gap_top
+    global flight_level5_double_bird_spawned
     global flight_plane_hp, flight_plane_smoke_next_ms, flight_plane_smoke_puffs
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
     global flight_crash_active, flight_crash_rotation_deg, flight_crash_velocity_y
     global flight_crash_landed_until_ms
     global flight_crash_plane_frame, flight_crash_plane_rect
+    global flight_crash_wreck_visible
     flight_mode = True
     flight_plane_x = 120.0
     flight_plane_y = float(GROUND_Y - 90)
     flight_mode_entry_level = current_level
-    flight_mode_exit_level = 7
+    flight_mode_exit_level = 5 if current_level <= 5 else 7
     flight_pipe_spawn_due_ms = millis() + 400
     flight_pipes = []
+    flight_birds = []
+    last_flight_gap_top = 0
+    flight_level5_double_bird_spawned = False
     flight_plane_hp = FLIGHT_PLANE_MAX_HP
     flight_plane_smoke_next_ms = 0
     flight_plane_smoke_puffs = []
@@ -2225,10 +2459,12 @@ def start_flight_mode():
     flight_crash_landed_until_ms = 0
     flight_crash_plane_frame = None
     flight_crash_plane_rect = (0.0, 0.0, AIRPLANE_PICKUP_W, AIRPLANE_PICKUP_H)
+    flight_crash_wreck_visible = False
 
 
 def end_flight_mode():
-    global flight_mode, flight_pipes, flight_pipe_spawn_due_ms
+    global flight_mode, flight_pipes, flight_birds, flight_pipe_spawn_due_ms, last_flight_gap_top
+    global flight_level5_double_bird_spawned
     global flight_plane_hp, flight_plane_smoke_next_ms, flight_plane_smoke_puffs
     global fly_left_pressed, fly_right_pressed, fly_up_pressed, fly_down_pressed
     global flight_crash_active, flight_crash_rotation_deg, flight_crash_velocity_y
@@ -2236,7 +2472,10 @@ def end_flight_mode():
     global dino_y, velocity_y, on_ground, is_ducking, is_fast_falling, player_x
     flight_mode = False
     flight_pipes = []
+    flight_birds = []
     flight_pipe_spawn_due_ms = 0
+    last_flight_gap_top = 0
+    flight_level5_double_bird_spawned = False
     flight_plane_hp = FLIGHT_PLANE_MAX_HP
     flight_plane_smoke_next_ms = 0
     flight_plane_smoke_puffs = []
@@ -2245,10 +2484,11 @@ def end_flight_mode():
     fly_up_pressed = False
     fly_down_pressed = False
     flight_crash_active = False
-    flight_crash_rotation_deg = 0.0
     flight_crash_velocity_y = 0.0
-    flight_crash_plane_frame = None
-    flight_crash_plane_rect = (0.0, 0.0, AIRPLANE_PICKUP_W, AIRPLANE_PICKUP_H)
+    if not flight_crash_wreck_visible:
+        flight_crash_rotation_deg = 0.0
+        flight_crash_plane_frame = None
+        flight_crash_plane_rect = (0.0, 0.0, AIRPLANE_PICKUP_W, AIRPLANE_PICKUP_H)
     player_x = float(flight_plane_x)
     dino_y = float(flight_plane_y)
     velocity_y = 0
@@ -2300,6 +2540,8 @@ def update_flight_crash_sequence():
 
 
 def finish_flight_crash_sequence():
+    global flight_crash_wreck_visible
+    flight_crash_wreck_visible = True
     apply_player_hit(play_sound=False)
     end_flight_mode()
 
@@ -2329,7 +2571,7 @@ def start_post_boss_transition(boss_snapshot):
     global post_boss_transition
     transition_player_x = player_x
     transition_player_y = dino_y
-    if boss_snapshot.get("level") == 6 and flight_mode:
+    if boss_snapshot.get("type") == "zeppelin_miniboss" and flight_mode:
         transition_player_x = flight_plane_x
         transition_player_y = flight_plane_y
     post_boss_transition = {
@@ -2342,17 +2584,20 @@ def start_post_boss_transition(boss_snapshot):
 
 
 def resolve_post_boss_transition_if_ready():
-    global post_boss_transition
+    global post_boss_transition, flight_pipe_spawn_due_ms, flight_mode_exit_level
     if post_boss_transition is None:
         return False
     if mini_boss_defeat_sequences or explosion_effects:
         return False
 
-    transition_level = int(post_boss_transition.get("level", 0))
+    transition_type = post_boss_transition.get("type")
     transition_player_x = float(post_boss_transition.get("player_x", player_x))
     transition_player_y = float(post_boss_transition.get("player_y", dino_y))
     post_boss_transition = None
-    if transition_level == 6:
+    if transition_type == "zeppelin_miniboss" and flight_mode and current_level == 6:
+        flight_mode_exit_level = 7
+        flight_pipe_spawn_due_ms = millis() + 250
+    elif transition_type == "zeppelin_miniboss":
         end_flight_mode()
     else:
         begin_post_boss_fall_in(transition_player_x, transition_player_y)
@@ -2388,20 +2633,20 @@ def draw_post_boss_transition(theme):
 def crash_flight_mode():
     if flight_crash_active or game_over:
         return
-    play_sfx(CRASH_SOUND)
+    play_sfx(FLIGHT_CRASH_SOUND if FLIGHT_CRASH_SOUND is not None else (PLAYER_DEATH_SOUND if PLAYER_DEATH_SOUND is not None else CRASH_SOUND))
     start_flight_crash_sequence()
 
 
 def spawn_flight_plane_smoke_puff():
-    puff_x = flight_plane_x + 14
-    puff_y = flight_plane_y + (AIRPLANE_PICKUP_H * 0.58)
+    puff_x = flight_plane_x + 18
+    puff_y = flight_plane_y + (AIRPLANE_PICKUP_H * 0.34)
     flight_plane_smoke_puffs.append({
         "x": float(puff_x),
         "y": float(puff_y),
-        "size": float(random(16, 24)),
-        "vx": float(random(-0.8, -0.2)),
-        "vy": float(random(-0.5, -0.15)),
-        "life_ms": int(random(900, 1300)),
+        "size": float(random(24, 38)),
+        "vx": float(random(-0.25, 0.18)),
+        "vy": float(random(-1.8, -0.85)),
+        "life_ms": int(random(1500, 2200)),
         "spawned_ms": millis(),
     })
     overflow = len(flight_plane_smoke_puffs) - 18
@@ -2418,7 +2663,7 @@ def register_flight_plane_damage_from_zeppelin():
     flight_plane_hp = max(0, flight_plane_hp - 1)
     player_damage_cooldown_until_ms = now + PLAYER_DAMAGE_COOLDOWN_MS
     spawn_flight_plane_smoke_puff()
-    play_sfx(CRASH_SOUND)
+    play_sfx(HISS_SOUND if HISS_SOUND is not None else CRASH_SOUND)
 
     if flight_plane_hp <= 0:
         crash_flight_mode()
@@ -2450,12 +2695,93 @@ def update_and_draw_flight_plane_smoke():
         progress = max(0.0, min(1.0, age / max(1, puff["life_ms"])))
         puff["x"] += puff["vx"]
         puff["y"] += puff["vy"]
-        puff_size = puff["size"] * (1.0 + (progress * 0.7))
+        puff_size = puff["size"] * (1.0 + (progress * 1.05))
         shade = int(142 + (46 * (1.0 - progress)))
         fill(shade, shade, shade)
         ellipse(int(puff["x"]), int(puff["y"]), int(puff_size), int(puff_size * 0.82))
         alive_puffs.append(puff)
     flight_plane_smoke_puffs[:] = alive_puffs
+
+
+def spawn_zeppelin_smoke_puff(boss):
+    smoke_puffs = boss.setdefault("smoke_puffs", [])
+    puff_x = boss["x"] + 44
+    puff_y = boss["y"] + 30
+    smoke_puffs.append({
+        "x": float(puff_x),
+        "y": float(puff_y),
+        "size": float(random(28, 44)),
+        "vx": float(random(-0.3, 0.16)),
+        "vy": float(random(-1.2, -0.45)),
+        "life_ms": int(random(1500, 2300)),
+        "spawned_ms": millis(),
+    })
+    overflow = len(smoke_puffs) - 18
+    if overflow > 0:
+        del smoke_puffs[0:overflow]
+
+
+def register_zeppelin_damage_feedback(boss, impact_x=None, impact_y=None):
+    if boss.get("type") != "zeppelin_miniboss":
+        return
+
+    now = millis()
+    spawn_zeppelin_smoke_puff(boss)
+    boss["smoke_next_ms"] = now + ZEPPELIN_SMOKE_INTERVAL_MS
+    if boss.get("explosion_next_ms", 0) <= 0:
+        boss["explosion_next_ms"] = now + ZEPPELIN_EXPLOSION_INTERVAL_MS
+    if impact_x is not None and impact_y is not None:
+        spawn_explosion_effect(
+            impact_x,
+            impact_y,
+            BOSS_HIT_EXPLOSION_SIZE * random(0.78, 1.12),
+            life_ms=430,
+            alpha=220,
+        )
+
+
+def update_and_draw_zeppelin_damage_feedback(boss):
+    if boss.get("type") != "zeppelin_miniboss":
+        return
+
+    now = millis()
+    if boss.get("hits_taken", 0) > 0 and boss.get("hits_taken", 0) < boss.get("hits_required", 1):
+        smoke_next_ms = int(boss.get("smoke_next_ms", 0) or 0)
+        if smoke_next_ms > 0 and now >= smoke_next_ms:
+            spawn_zeppelin_smoke_puff(boss)
+            boss["smoke_next_ms"] = now + ZEPPELIN_SMOKE_INTERVAL_MS
+
+        explosion_next_ms = int(boss.get("explosion_next_ms", 0) or 0)
+        if explosion_next_ms > 0 and now >= explosion_next_ms:
+            blast_x = boss["x"] + random(54, max(60, boss["w"] - 30))
+            blast_y = boss["y"] + random(24, max(30, boss["h"] - 18))
+            spawn_explosion_effect(
+                blast_x,
+                blast_y,
+                BOSS_HIT_EXPLOSION_SIZE * random(0.42, 0.62),
+                life_ms=340,
+                alpha=190,
+            )
+            boss["explosion_next_ms"] = now + ZEPPELIN_EXPLOSION_INTERVAL_MS
+
+    smoke_puffs = boss.get("smoke_puffs", [])
+    if not smoke_puffs:
+        return
+
+    alive_puffs = []
+    for puff in smoke_puffs:
+        age = now - puff["spawned_ms"]
+        if age >= puff["life_ms"]:
+            continue
+        progress = max(0.0, min(1.0, age / max(1, puff["life_ms"])))
+        puff["x"] += puff["vx"]
+        puff["y"] += puff["vy"]
+        puff_size = puff["size"] * (1.0 + (progress * 1.0))
+        shade = int(142 + (46 * (1.0 - progress)))
+        fill(shade, shade, shade)
+        ellipse(int(puff["x"]), int(puff["y"]), int(puff_size), int(puff_size * 0.82))
+        alive_puffs.append(puff)
+    boss["smoke_puffs"] = alive_puffs
 
 
 def get_ground_pipe_rects(draw_x=None):
@@ -2993,16 +3319,6 @@ def draw_cactus_fortress_backdrop(theme):
     ellipse(380, GROUND_Y - 10, 344, 108)
     ellipse(650, GROUND_Y - 16, 286, 96)
 
-    fill(144, 98, 66)
-    rect(94, 184, 118, 138)
-    rect(108, 162, 78, 28)
-    rect(522, 204, 142, 118)
-    rect(548, 176, 86, 32)
-
-    fill(199, 164, 120)
-    rect(112, 194, 74, 12)
-    rect(544, 214, 94, 12)
-
     if CACTUS_BOSS_IMG is not None:
         image(CACTUS_BOSS_IMG, 224, GROUND_Y - 176, 104, 176)
         image(CACTUS_BOSS_IMG, 470, GROUND_Y - 142, 80, 142)
@@ -3092,6 +3408,36 @@ def player_centered_on_pipe(pipe_rect):
     pipe_x, _, pipe_w, _ = pipe_rect
     pipe_center_x = pipe_x + (pipe_w / 2.0)
     return abs(hitbox_center_x - pipe_center_x) <= PIPE_ENTRY_CENTER_TOLERANCE_PX
+
+
+def resolve_pipe_side_overlap(pipe_rect, prev_hitbox, current_hitbox):
+    global player_x
+    pipe_x, _, pipe_w, _ = pipe_rect
+    pipe_left = pipe_x
+    pipe_right = pipe_x + pipe_w
+    prev_center_x = prev_hitbox[0] + (prev_hitbox[2] / 2.0)
+    pipe_center_x = pipe_left + (pipe_w / 2.0)
+    overlap_left = (current_hitbox[0] + current_hitbox[2]) - pipe_left
+    overlap_right = pipe_right - current_hitbox[0]
+
+    if overlap_left <= 0 or overlap_right <= 0:
+        return
+
+    moved_right_into_pipe = prev_hitbox[0] + prev_hitbox[2] <= pipe_left
+    moved_left_into_pipe = prev_hitbox[0] >= pipe_right
+
+    if moved_right_into_pipe:
+        player_x -= overlap_left + 1
+        return
+
+    if moved_left_into_pipe:
+        player_x += overlap_right + 1
+        return
+
+    if prev_center_x <= pipe_center_x:
+        player_x -= overlap_left + 1
+    else:
+        player_x += overlap_right + 1
 
 
 def start_pipe_entry_sequence(level, pipe_rect):
@@ -3186,7 +3532,7 @@ def draw_pre_boss_scene(theme):
 
 
 def apply_pre_boss_scene_collisions(prev_player_x, prev_dino_y, prev_ducking):
-    global player_x, on_ground
+    global on_ground
     if pre_boss_scene_level == 4:
         platforms = tuple(BIRD_TREE_BRANCH_RECTS) + (get_pre_boss_entrance_rect(4),)
         landed = False
@@ -3209,22 +3555,15 @@ def apply_pre_boss_scene_collisions(prev_player_x, prev_dino_y, prev_ducking):
         return
 
     pipe_rect = get_pre_boss_entrance_rect(pre_boss_scene_level)
+    landed_on_pipe = apply_one_way_platform_collision(pipe_rect, prev_player_x, prev_dino_y, prev_ducking)
+    if landed_on_pipe or player_on_platform_top(pipe_rect, tolerance=12):
+        return
+
     # Solid side walls for the pipe in the hub scene.
     current_hitbox = get_dino_hitbox()
     prev_hitbox = get_dino_hitbox_for_state(prev_player_x, prev_dino_y, prev_ducking)
     if rects_overlap(current_hitbox, pipe_rect):
-        pipe_x, _, pipe_w, _ = pipe_rect
-        pipe_left = pipe_x
-        pipe_right = pipe_x + pipe_w
-        moved_right_into_pipe = prev_hitbox[0] + prev_hitbox[2] <= pipe_left and current_hitbox[0] + current_hitbox[2] > pipe_left
-        moved_left_into_pipe = prev_hitbox[0] >= pipe_right and current_hitbox[0] < pipe_right
-        if moved_right_into_pipe:
-            player_x = min(player_x, float(pipe_left - DINO_W - 1))
-        elif moved_left_into_pipe:
-            player_x = max(player_x, float(pipe_right + 1))
-
-    # Pipe top is a one-way platform: jump onto it, pass through from below/sides.
-    apply_one_way_platform_collision(pipe_rect, prev_player_x, prev_dino_y, prev_ducking)
+        resolve_pipe_side_overlap(pipe_rect, prev_hitbox, current_hitbox)
 
 
 def start_pending_boss_encounter(level):
@@ -3243,6 +3582,14 @@ def start_pending_boss_encounter(level):
         dino_y = float(CACTUS_BOSS_ENTRY_PIPE_Y + CACTUS_BOSS_ENTRY_PIPE_H - DINO_H + 6)
         velocity_y = 0
         on_ground = False
+        is_ducking = False
+        is_fast_falling = False
+    elif level == 4:
+        first_branch_x, first_branch_y, first_branch_w, _ = BIRD_BOSS_BRANCH_RECTS[0]
+        player_x = float(first_branch_x + ((first_branch_w - DINO_W) / 2.0))
+        dino_y = float(first_branch_y - DINO_H)
+        velocity_y = 0
+        on_ground = True
         is_ducking = False
         is_fast_falling = False
     else:
@@ -3408,10 +3755,13 @@ def apply_player_hit(hit_sound=None, play_sound=True):
     if now < player_damage_cooldown_until_ms:
         return
 
+    non_lethal_hit_sound = hit_sound if hit_sound is not None else (HISS_SOUND if HISS_SOUND is not None else CRASH_SOUND)
+    lethal_hit_sound = hit_sound if hit_sound is not None else (PLAYER_DEATH_SOUND if PLAYER_DEATH_SOUND is not None else CRASH_SOUND)
+
     if is_shield_active():
         player_damage_cooldown_until_ms = now + PLAYER_DAMAGE_COOLDOWN_MS
         if play_sound:
-            play_sfx(hit_sound if hit_sound is not None else CRASH_SOUND)
+            play_sfx(non_lethal_hit_sound)
         return
 
     if shop_extra_life_count > 0:
@@ -3419,12 +3769,12 @@ def apply_player_hit(hit_sound=None, play_sound=True):
         player_damage_cooldown_until_ms = now + PLAYER_DAMAGE_COOLDOWN_MS
         set_shop_notice("Extra life used!", duration_ms=1200)
         if play_sound:
-            play_sfx(hit_sound if hit_sound is not None else CRASH_SOUND)
+            play_sfx(non_lethal_hit_sound)
         return
 
     game_over = True
     if play_sound:
-        play_sfx(hit_sound if hit_sound is not None else CRASH_SOUND)
+        play_sfx(lethal_hit_sound)
 
 
 def update_level_from_progress():
@@ -3433,6 +3783,17 @@ def update_level_from_progress():
     global player_x, dino_y, velocity_y, on_ground, is_ducking, is_fast_falling
     global boss_left_pressed, boss_right_pressed
     new_level = get_level_for_obstacle_count(obstacles_cleared)
+    for boss_level in OBSTACLE_GATED_BOSS_LEVELS:
+        if (
+            current_level == boss_level and
+            not boss_completed.get(boss_level, False) and
+            obstacles_cleared >= get_level_total_obstacle_count(boss_level) and
+            new_level > boss_level
+        ):
+            new_level = boss_level
+            break
+    if current_level == 4 and boss_completed.get(4, False) and bird_boss_exit_obstacles_remaining > 0 and new_level > 4:
+        new_level = 4
     if new_level > current_level:
         current_level = new_level
         scripted_obstacle_level = current_level
@@ -3459,13 +3820,17 @@ def update_level_from_progress():
 
 
 def register_cleared_obstacle(amount=1):
-    global obstacles_cleared
-    obstacles_cleared += max(0, int(amount))
+    global obstacles_cleared, bird_boss_exit_obstacles_remaining
+    increment = max(0, int(amount))
+    obstacles_cleared += increment
+    if current_level == 4 and boss_completed.get(4, False) and bird_boss_exit_obstacles_remaining > 0:
+        bird_boss_exit_obstacles_remaining = max(0, bird_boss_exit_obstacles_remaining - increment)
     update_level_from_progress()
 
 
 def debug_step_level(level_delta):
     global current_level, score, scroll_speed, obstacles_cleared, next_level_obstacle_goal, level_blink_until_ms, pending_airplane_spawn
+    global bird_boss_exit_obstacles_remaining
     global scripted_obstacle_level, scripted_obstacle_index
     global boss_state, boss_intro_until_ms, pre_boss_scene_level, pending_boss_shop_level
     global pipe_entry_active, pipe_entry_level, pipe_entry_started_ms
@@ -3492,11 +3857,12 @@ def debug_step_level(level_delta):
     boss_intro_until_ms = 0
     pre_boss_scene_level = 0
     pending_boss_shop_level = 0
+    bird_boss_exit_obstacles_remaining = 0
     pipe_entry_active = False
     pipe_entry_level = 0
     pipe_entry_started_ms = 0
 
-    # Level 6 starts in the flight/pipes phase; the Zeppelin arrives later.
+    # Level 6 starts in the cave-flight phase after the Zeppelin boundary fight.
     if current_level == 6:
         if not flight_mode:
             start_flight_mode()
@@ -3723,7 +4089,7 @@ def update_hazardous_explosions():
         )
         if rects_overlap(player_hitbox, blast_rect):
             effect["hit_player"] = True
-            apply_player_hit(CRASH_SOUND)
+            apply_player_hit()
             if game_over:
                 return
 
@@ -4057,11 +4423,11 @@ def spawn_boss_for_level(level):
             "last_attack_ms": now,
         }
 
-    if level == 6:
+    if level == 5:
         return {
             "type": "zeppelin_miniboss",
-            "level": 6,
-            "name": "Mini Boss L6: Zeppelin",
+            "level": 5,
+            "name": "Mini Boss L5: Zeppelin",
             "x": -260.0,
             "y": 120.0,
             "w": 220,
@@ -4087,6 +4453,9 @@ def spawn_boss_for_level(level):
             "enemy_projectiles": create_projectile_pool(),
             "attack_interval_ms": 980,
             "last_attack_ms": now,
+            "smoke_puffs": [],
+            "smoke_next_ms": 0,
+            "explosion_next_ms": 0,
         }
 
     if level == 7:
@@ -4269,6 +4638,9 @@ def draw_bird_boss_arena(theme):
     rect(716, 104, 12, GROUND_Y - 110)
     fill(82, 52, 30)
     rect(28, 160, 32, GROUND_Y - 160)
+
+    fill(56, 92, 70)
+    rect(0, GROUND_Y + 2, width, max(0, height - GROUND_Y - 2))
 
     for branch_rect in BIRD_BOSS_BRANCH_RECTS:
         draw_branch_platform(branch_rect)
@@ -4562,6 +4934,7 @@ def apply_bird_boss_branch_collisions(prev_player_x, prev_dino_y, prev_ducking):
     if (not landed) and on_ground and dino_y < DINO_Y:
         if not any(platform_supports_player(platform_rect) for platform_rect in BIRD_BOSS_BRANCH_RECTS):
             on_ground = False
+    return landed
 
 
 def maybe_start_boss_encounter():
@@ -4579,6 +4952,8 @@ def maybe_start_boss_encounter():
 
     for level in BOSS_LEVEL_ORDER:
         if current_level >= level and not boss_completed[level]:
+            if level in OBSTACLE_GATED_BOSS_LEVELS and obstacles_cleared < get_level_total_obstacle_count(level):
+                continue
             requires_weapon = level != 10
             has_weapon_for_level = (not requires_weapon) or (weapon_powerup_ready and weapon_powerup_level == level)
             if requires_weapon and not has_weapon_for_level:
@@ -4801,7 +5176,7 @@ def finish_boss_if_defeated(boss):
     global boss_state, score, weapon_powerup_ready, weapon_powerup_level, game_completed
     global boss_left_pressed, boss_right_pressed
     global final_boss_snapshot, final_boss_defeat_until_ms, final_boss_next_blast_ms
-    global pending_credits_after_victory
+    global pending_credits_after_victory, bird_boss_exit_obstacles_remaining
     if boss["hits_taken"] < boss["hits_required"]:
         return
     if boss["type"] in ("bird_miniboss", "cactus_miniboss"):
@@ -4821,6 +5196,10 @@ def finish_boss_if_defeated(boss):
     spawn_final_boss_explosion_burst(boss_snapshot, count=burst_count)
     play_sfx(BOSS_EXPLOSION_SOUND)
     score += BOSS_REWARD_POINTS.get(boss["level"], 0)
+    if boss["level"] == 4:
+        bird_boss_exit_obstacles_remaining = BIRD_BOSS_EXIT_OBSTACLES
+    elif boss["level"] == 5:
+        update_level_from_progress()
     if boss["level"] < 10:
         mini_boss_defeat_sequences.append({
             "snapshot": boss_snapshot,
@@ -4885,7 +5264,7 @@ def update_enemy_projectiles(boss):
             projectile_rect = get_projectile_rect(projectile)
             if rects_overlap(projectile_rect, player_hitbox):
                 projectile["active"] = False
-                apply_player_hit(CRASH_SOUND)
+                apply_player_hit()
                 return
             if projectile["y"] + projectile["h"] >= GROUND_Y:
                 spawn_coyote_pit(boss, projectile["x"] + (projectile["w"] / 2))
@@ -4910,7 +5289,7 @@ def update_enemy_projectiles(boss):
             projectile_rect = get_projectile_rect(projectile)
             if rects_overlap(projectile_rect, player_hitbox):
                 projectile["active"] = False
-                apply_player_hit(CRASH_SOUND)
+                apply_player_hit()
                 return
             if projectile["y"] + projectile["h"] >= GROUND_Y:
                 projectile.update({
@@ -4943,7 +5322,7 @@ def update_enemy_projectiles(boss):
 
         if projectile["kind"] in ("tnt_blast", "big_tnt_blast"):
             if rects_overlap(get_projectile_rect(projectile), player_hitbox):
-                apply_player_hit(CRASH_SOUND)
+                apply_player_hit()
                 return
             if millis() >= projectile.get("blast_until", 0):
                 projectile["active"] = False
@@ -4957,7 +5336,7 @@ def update_enemy_projectiles(boss):
             if flight_mode and boss.get("type") == "zeppelin_miniboss" and projectile.get("kind") == "zeppelin_bomb":
                 register_flight_plane_damage_from_zeppelin()
             else:
-                apply_player_hit(CRASH_SOUND)
+                apply_player_hit()
             return
         if projectile["x"] + projectile["w"] < -40:
             projectile["active"] = False
@@ -5015,7 +5394,11 @@ def update_player_projectiles_against_boss(boss):
             hit = True
 
         if hit:
-            if boss["type"] in ("final_boss", "zeppelin_miniboss"):
+            if boss["type"] == "zeppelin_miniboss":
+                impact_x = projectile_rect[0] + (projectile_rect[2] / 2)
+                impact_y = projectile_rect[1] + (projectile_rect[3] / 2)
+                register_zeppelin_damage_feedback(boss, impact_x, impact_y)
+            elif boss["type"] == "final_boss":
                 impact_x = projectile_rect[0] + (projectile_rect[2] / 2)
                 impact_y = projectile_rect[1] + (projectile_rect[3] / 2)
                 spawn_explosion_effect(
@@ -5294,7 +5677,14 @@ def update_and_draw_boss_mode(theme, update_world=True):
         update_player_vertical_motion()
 
         if boss["type"] == "bird_miniboss":
-            apply_bird_boss_branch_collisions(prev_player_x, prev_dino_y, prev_ducking)
+            landed_on_branch = apply_bird_boss_branch_collisions(prev_player_x, prev_dino_y, prev_ducking)
+            if (not landed_on_branch) and on_ground and dino_y >= DINO_Y:
+                play_sfx_limited(
+                    BIRD_BOSS_FALL_SOUND if BIRD_BOSS_FALL_SOUND is not None else FALL_IMPACT_SOUND,
+                    maxtime_ms=5000,
+                )
+                apply_player_hit(play_sound=False)
+                return
             boss["x"] += boss["vx"]
             boss["y"] += boss["vy"]
             if boss["x"] <= boss["min_x"] or boss["x"] >= boss["max_x"]:
@@ -5335,7 +5725,7 @@ def update_and_draw_boss_mode(theme, update_world=True):
             return
 
         if rects_overlap(get_dino_hitbox(), get_boss_hitbox(boss)):
-            apply_player_hit(CRASH_SOUND)
+            apply_player_hit()
             return
 
     if boss["type"] == "bird_miniboss":
@@ -5571,6 +5961,20 @@ def draw_hud(theme, force_visible=False):
         text(f"Level Up! x{LEVEL_SPEED_FACTOR}", width // 2 - 90, 40)
 
 
+def draw_level6_cave_flight_backdrop():
+    background(20, 34, 66)
+    fill(34, 54, 98)
+    rect(0, 0, width, GROUND_Y)
+    fill(48, 76, 122)
+    rect(0, GROUND_Y, width, 40)
+    fill(62, 96, 152)
+    for ridge_x, ridge_y, ridge_w, ridge_h in ((26, 92, 140, 36), (214, 64, 170, 44), (482, 88, 154, 38), (658, 54, 122, 40)):
+        ellipse(ridge_x, ridge_y, ridge_w, ridge_h)
+    fill(32, 48, 86)
+    rect(0, 0, 42, GROUND_Y)
+    rect(width - 42, 0, 42, GROUND_Y)
+
+
 def draw_debug_overlay():
     if not isDebugMode:
         return
@@ -5590,14 +5994,27 @@ def draw_flight_pipes():
         bottom_y = top_h + FLIGHT_PIPE_GAP_H
         bottom_h = GROUND_Y - bottom_y
 
-        draw_pipe_column(x, 0, FLIGHT_PIPE_WIDTH, top_h)
-        draw_pipe_column(x, bottom_y, FLIGHT_PIPE_WIDTH, bottom_h)
+        if pipe.get("style") == "cave":
+            shake_x = 0.0
+            tremor_until_ms = int(pipe.get("tremor_until_ms", 0) or 0)
+            if tremor_until_ms > millis():
+                shake_x = math.sin(millis() / 24.0) * 3.0
+            draw_cave_spire(x, 0, FLIGHT_PIPE_WIDTH, top_h, upside_down=True, shake_x=shake_x)
+            draw_cave_spire(x, bottom_y, FLIGHT_PIPE_WIDTH, bottom_h, upside_down=False, shake_x=shake_x)
+            if pipe.get("fall_chunk") is not None:
+                draw_flight_fall_chunk(pipe["fall_chunk"], shake_x=shake_x)
+        else:
+            draw_pipe_column(x, 0, FLIGHT_PIPE_WIDTH, top_h)
+            draw_pipe_column(x, bottom_y, FLIGHT_PIPE_WIDTH, bottom_h)
+
+    for bird in flight_birds:
+        image(BIRD_RIGHT_IMG, int(bird["x"]), int(bird["y"]), int(bird["w"]), int(bird["h"]))
 
 
 def update_and_draw_flight_mode(theme, update_world=True):
     global flight_plane_x, flight_plane_y, flight_pipe_spawn_due_ms, score
     global boss_state, boss_intro_until_ms
-    global flight_pipes
+    global flight_pipes, flight_birds
 
     now = millis()
     boss = boss_state if boss_state is not None and boss_state.get("type") == "zeppelin_miniboss" else None
@@ -5626,36 +6043,41 @@ def update_and_draw_flight_mode(theme, update_world=True):
 
         for pipe in flight_pipes:
             pipe["x"] -= scroll_speed
+            update_flight_cave_hazard(pipe, now)
             if not pipe["passed"] and pipe["x"] + FLIGHT_PIPE_WIDTH < flight_plane_x:
                 pipe["passed"] = True
                 score += FLIGHT_PIPE_POINTS
                 register_cleared_obstacle()
 
-        if boss is None and current_level >= flight_mode_exit_level:
-            if not boss_completed.get(6, False):
-                boss_state = spawn_boss_for_level(6)
+        for bird in flight_birds:
+            bird["x"] -= (scroll_speed + bird.get("vx", 0.0))
+
+        if boss is None and current_level >= flight_mode_exit_level and obstacles_cleared >= get_level_total_obstacle_count(5):
+            if not boss_completed.get(5, False):
+                boss_state = spawn_boss_for_level(5)
                 boss_intro_until_ms = 0
                 boss = boss_state
                 flight_pipes = []
+                flight_birds = []
             else:
                 end_flight_mode()
                 return
 
         flight_pipes[:] = [p for p in flight_pipes if p["x"] + FLIGHT_PIPE_WIDTH > -20]
+        flight_birds[:] = [bird for bird in flight_birds if bird["x"] + bird["w"] > -20]
 
         # Plane hitbox vs pipes.
         plane_rect = get_flight_plane_rect()
         for pipe in flight_pipes:
-            top_rect = (pipe["x"], 0, FLIGHT_PIPE_WIDTH, pipe["gap_top"])
-            bottom_rect = (
-                pipe["x"],
-                pipe["gap_top"] + FLIGHT_PIPE_GAP_H,
-                FLIGHT_PIPE_WIDTH,
-                GROUND_Y - (pipe["gap_top"] + FLIGHT_PIPE_GAP_H),
-            )
-            if rects_overlap(plane_rect, top_rect) or rects_overlap(plane_rect, bottom_rect):
+            if any(rects_overlap(plane_rect, hazard_rect) for hazard_rect in get_flight_hazard_rects(pipe)):
                 crash_flight_mode()
                 break
+
+        if not flight_crash_active:
+            for bird in flight_birds:
+                if rects_overlap(plane_rect, (bird["x"], bird["y"], bird["w"], bird["h"])):
+                    crash_flight_mode()
+                    break
 
         if boss is not None:
             phase_completed = update_zeppelin_boss_phase(boss, now)
@@ -5689,12 +6111,15 @@ def update_and_draw_flight_mode(theme, update_world=True):
         line(0, GROUND_Y, width, GROUND_Y)
         no_stroke()
     else:
+        if current_level == 6:
+            draw_level6_cave_flight_backdrop()
         draw_flight_pipes()
 
     update_and_draw_flight_plane_smoke()
 
     if boss is not None:
         draw_boss_entity(boss)
+        update_and_draw_zeppelin_damage_feedback(boss)
         if boss.get("phase") == "fight":
             draw_boss_meter(boss, theme)
             for projectile in iter_active_projectiles(boss["enemy_projectiles"]):
@@ -5717,13 +6142,10 @@ def update_and_draw_flight_mode(theme, update_world=True):
         stroke_weight(2)
         rect(*plane_rect)
         for pipe in flight_pipes:
-            rect(pipe["x"], 0, FLIGHT_PIPE_WIDTH, pipe["gap_top"])
-            rect(
-                pipe["x"],
-                pipe["gap_top"] + FLIGHT_PIPE_GAP_H,
-                FLIGHT_PIPE_WIDTH,
-                GROUND_Y - (pipe["gap_top"] + FLIGHT_PIPE_GAP_H),
-            )
+            for hazard_rect in get_flight_hazard_rects(pipe):
+                rect(*hazard_rect)
+        for bird in flight_birds:
+            rect(bird["x"], bird["y"], bird["w"], bird["h"])
         no_stroke()
 
     if boss is not None and boss.get("phase") != "fight":
@@ -5843,6 +6265,21 @@ def draw_water_lily_obstacle(draw_x, draw_y, draw_w, draw_h):
         rect(int(lx), int(ly), int(lw), int(lh))
         fill(48, 128, 58)
         rect(int(lx + 3), int(ly + 2), int(max(2, lw - 6)), int(max(2, lh - 4)))
+
+
+def draw_bird_swarm_obstacle(draw_x, draw_y, draw_w, draw_h):
+    flock = (
+        (0.00, 0.24, 0.36, 0.50, False),
+        (0.26, 0.00, 0.34, 0.46, True),
+        (0.56, 0.20, 0.38, 0.52, False),
+    )
+    for offset_x, offset_y, scale_w, scale_h, face_left in flock:
+        bird_img = BIRD_LEFT_IMG if face_left else BIRD_RIGHT_IMG
+        bird_x = int(draw_x + (draw_w * offset_x))
+        bird_y = int(draw_y + (draw_h * offset_y))
+        bird_w = int(draw_w * scale_w)
+        bird_h = int(draw_h * scale_h)
+        image(bird_img, bird_x, bird_y, bird_w, bird_h)
 
 
 def draw_jump_block_obstacle(draw_x, draw_y, draw_w, draw_h):
@@ -6401,7 +6838,7 @@ def update_and_draw_extra_obstacles(theme):
         obstacle_hitbox = get_extra_obstacle_hitbox(obstacle)
         if not game_paused and not game_over and rects_overlap(dino_hitbox, obstacle_hitbox):
             is_ducking = False
-            apply_player_hit(CRASH_SOUND)
+            apply_player_hit()
             if game_over:
                 remaining.append(obstacle)
                 break
@@ -6700,6 +7137,8 @@ def draw():
         draw_coin_pickup(obstacle_draw_x, obstacle_draw_y, obstacle_draw_w, obstacle_draw_h)
     elif obstacle_type == "water_lily":
         draw_water_lily_obstacle(obstacle_draw_x, obstacle_draw_y, obstacle_draw_w, obstacle_draw_h)
+    elif obstacle_type == "bird_swarm":
+        draw_bird_swarm_obstacle(obstacle_draw_x, obstacle_draw_y, obstacle_draw_w, obstacle_draw_h)
     elif obstacle_type == "pipe_pair":
         draw_ground_pipe_pair(obstacle_draw_x)
     else:
@@ -6760,7 +7199,7 @@ def draw():
             snake_hiss_played_for_current = True
             play_sfx(HISS_SOUND)
 
-        if obstacle_type == "bird_low":
+        if obstacle_cfg.get("requires_duck_score", False):
             dino_hitbox = get_dino_hitbox()
             obstacle_hitbox = get_obstacle_hitbox()
             if (
@@ -6870,7 +7309,7 @@ def draw():
             pass
         elif rects_overlap(dino_hitbox, obstacle_hitbox):
             is_ducking = False
-            apply_player_hit(CRASH_SOUND)
+            apply_player_hit()
 
     if isDebugMode:
         no_fill()
@@ -6963,9 +7402,15 @@ def get_touch_control_names():
 
 def get_touch_controls_layout():
     names = set(get_touch_control_names())
-    side = max(72, max(TOUCH_BTN_SIZE, int(min(width, height) * 0.16)))
-    gap = max(10, max(TOUCH_BTN_GAP, int(side * 0.16)))
-    pad = max(12, int(side * 0.16))
+    narrow_screen = width <= TOUCH_PHONE_BREAKPOINT_W or height <= TOUCH_PHONE_BREAKPOINT_H
+    side_ratio = 0.195 if narrow_screen else 0.16
+    side = max(72, max(TOUCH_BTN_SIZE, int(min(width, height) * side_ratio)))
+    if narrow_screen:
+        side = max(side, 128)
+    gap_ratio = 0.18 if narrow_screen else 0.16
+    gap = max(10, max(TOUCH_BTN_GAP, int(side * gap_ratio)))
+    pad_ratio = 0.24 if narrow_screen else 0.16
+    pad = max(12, int(side * pad_ratio))
     buttons = {}
 
     if "left" in names or "right" in names:
@@ -6985,8 +7430,8 @@ def get_touch_controls_layout():
         buttons["down"] = (controls_x, down_y, side, side)
 
     if "action" in names:
-        action_w = max(140, max(TOUCH_ACTION_BTN_W, int(side * 1.8)))
-        action_h = max(TOUCH_ACTION_BTN_H, side)
+        action_w = max(140, max(TOUCH_ACTION_BTN_W, int(side * (2.05 if narrow_screen else 1.8))))
+        action_h = max(TOUCH_ACTION_BTN_H, int(side * (1.08 if narrow_screen else 1.0)))
         action_x = width - action_w - pad
         action_y = height - action_h - pad
         if "left" not in names and "right" not in names:
@@ -7000,6 +7445,7 @@ def draw_touch_controls_overlay():
     if not should_show_touch_controls():
         return
     buttons = get_touch_controls_layout()
+    narrow_screen = width <= TOUCH_PHONE_BREAKPOINT_W or height <= TOUCH_PHONE_BREAKPOINT_H
     labels = {
         "left": "<",
         "right": ">",
@@ -7010,16 +7456,21 @@ def draw_touch_controls_overlay():
     for name, (bx, by, bw, bh) in buttons.items():
         is_pressed = (touch_active_button == name)
         if is_pressed:
-            fill(244, 208, 88)
+            fill(248, 214, 94, 220)
         else:
-            fill(206, 214, 226)
+            fill(230, 236, 244, 152)
+        no_stroke()
         rect(int(bx), int(by), int(bw), int(bh))
-        fill(22, 28, 42)
-        text_size(28 if name != "action" else 30)
+        outline_color = (94, 112, 138) if not is_pressed else (184, 122, 28)
+        draw_rounded_rect_outline(int(bx), int(by), int(bw), int(bh), 16, outline_color, 2)
+        fill(22, 28, 42, 238)
+        label_size = 34 if narrow_screen and name != "action" else (28 if name != "action" else (34 if narrow_screen else 30))
+        text_size(label_size)
         tx = int(bx + (bw * 0.28))
-        ty = int(by + (bh * 0.63))
+        ty = int(by + (bh * 0.62))
         if name == "action":
-            tx = int(bx + 26)
+            tx = int(bx + (26 if not narrow_screen else 30))
+            ty = int(by + (bh * 0.6))
         text(labels[name], tx, ty)
 
 
@@ -7493,6 +7944,37 @@ def draw_high_jump_powerup_effect(pose):
     surface.blit(glow, (feet_x, feet_y))
 
 
+def is_level9_han_car_active():
+    return (
+        game_started and
+        not game_over and
+        not flight_mode and
+        not flight_crash_wreck_visible and
+        not pipe_entry_active and
+        current_level == 9
+    )
+
+
+def draw_level9_han_car_overlay(pose):
+    if not is_level9_han_car_active():
+        return
+
+    body_w = max(76, pose["w"] + 28)
+    body_h = 24 if pose["ducking"] else 28
+    body_x = int(pose["x"] + (pose["w"] * 0.5) - (body_w * 0.5))
+    body_y = int(pose["y"] + pose["h"] - body_h + 2)
+    wheel_d = 18
+    wheel_y = body_y + body_h
+
+    no_stroke()
+    fill(32, 32, 36)
+    ellipse(body_x + 18, wheel_y, wheel_d, wheel_d)
+    ellipse(body_x + body_w - 18, wheel_y, wheel_d, wheel_d)
+
+    fill(205, 46, 46)
+    rect(body_x, body_y, body_w, body_h)
+
+
 def weapon_overlay_decorator(draw_fn):
     def wrapped():
         pose = draw_fn()
@@ -7508,22 +7990,38 @@ def weapon_overlay_decorator(draw_fn):
     return wrapped
 
 
+def level9_car_overlay_decorator(draw_fn):
+    def wrapped():
+        pose = draw_fn()
+        if pose is None:
+            return None
+        draw_level9_han_car_overlay(pose)
+        return pose
+    return wrapped
+
+
+@level9_car_overlay_decorator
 @weapon_overlay_decorator
 def draw_main_character():
-    if flight_mode:
+    if flight_mode or flight_crash_wreck_visible:
         if flight_crash_active:
             plane_x, plane_y, plane_w, plane_h = flight_crash_plane_rect
             plane_frame = flight_crash_plane_frame if flight_crash_plane_frame is not None else AIRPLANE_IMG
             image(transform.rotate(plane_frame, -flight_crash_rotation_deg), plane_x, plane_y, plane_w, plane_h)
         else:
-            plane_x, plane_y, plane_w, plane_h = get_flight_plane_rect()
-            plane_frames = get_plane_frames_for_character(get_current_character_key())
-            if plane_frames:
-                frame_idx = int(millis() / 120) % len(plane_frames)
-                plane_frame = plane_frames[frame_idx]
-                image(plane_frame, plane_x, plane_y, plane_w, plane_h)
+            if flight_crash_wreck_visible:
+                plane_x, plane_y, plane_w, plane_h = flight_crash_plane_rect
+                plane_frame = flight_crash_plane_frame if flight_crash_plane_frame is not None else AIRPLANE_IMG
+                image(transform.rotate(plane_frame, -flight_crash_rotation_deg), plane_x, plane_y, plane_w, plane_h)
             else:
-                image(AIRPLANE_IMG, plane_x, plane_y, plane_w, plane_h)
+                plane_x, plane_y, plane_w, plane_h = get_flight_plane_rect()
+                plane_frames = get_plane_frames_for_character(get_current_character_key())
+                if plane_frames:
+                    frame_idx = int(millis() / 120) % len(plane_frames)
+                    plane_frame = plane_frames[frame_idx]
+                    image(plane_frame, plane_x, plane_y, plane_w, plane_h)
+                else:
+                    image(AIRPLANE_IMG, plane_x, plane_y, plane_w, plane_h)
         if isDebugMode:
             no_fill()
             stroke(255, 0, 0)

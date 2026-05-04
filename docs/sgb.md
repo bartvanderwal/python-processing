@@ -16,8 +16,6 @@ Voor de hoofdstukindeling volgen we vooral de Software Guidebook-benadering van 
 - Development Environment
 - Decision Log
 
-## Leeswijzer
-
 Deze guidebook gebruikt ook een vaste schrijfstijl. De regels hieronder houden de tekst technisch, precies en consistent.
 
 - Technische documentatie hoort helder en ondubbelzinnig te zijn.
@@ -49,7 +47,7 @@ De game is een level-based runner met characterkeuze, powerups, mini-bosses, fli
 
 De badger shop verschijnt in het menu en vlak voor boss fights.
 
-### Beschikbare powerups
+### 2.1.1 Beschikbare powerups
 
 - `Extra Life`:
   - icoon: hartje;
@@ -68,13 +66,13 @@ De badger shop verschijnt in het menu en vlak voor boss fights.
   - effect: hogere sprongen tijdelijk;
   - duur: `SHOP_JUMP_SHOES_MS = 30000`.
 
-### Activatiegedrag
+### 2.1.2 Activatiegedrag
 
 - Aankopen in het startmenu worden bij run-start geactiveerd.
 - Aankopen in de pre-boss shop worden geactiveerd zodra de speler de shop-overlay afsluit.
 - Het schild en extra leven zijn verdedigende lagen; coin boost en jump shoes zijn tijdelijke boosts.
 
-### UI-richting
+### 2.1.3 UI-richting
 
 - De vier shop-items horen icon-first te zijn.
 - Dezelfde iconen mogen later ook in de HUD gebruikt worden zodra losse uitgesneden assets beschikbaar zijn.
@@ -89,25 +87,26 @@ Voor elk boss level stopt de endless-runner-flow kort in een statische hubscene.
 - Rechts staat de entrance naar het gevecht.
 - Interactie gebeurt met `Pijl omlaag`.
 
-### Mini bosses
+### 2.2.1 Mini bosses
 
 - Voor level 4 en level 7 staat rechts een arena-ingang.
 - De speler kan eerst shoppen en daarna bewust het gevecht starten.
-- Level 6 heeft een afwijkende minibossflow: aan het einde van de pipe/flappy flight-sectie verschijnt een Zeppelin in de lucht in plaats van een ground-hub.
+- Tussen level 5 en level 6 zit een afwijkende minibossflow: aan het einde van de pipe/flappy flight-sectie verschijnt een Zeppelin in de lucht in plaats van een ground-hub.
 - Die Zeppelin wordt verslagen vanuit het eigen gele vliegtuig met een schot-aanval; de boss is dus onderdeel van `flight_mode` en niet van de gewone boss hub.
 
-### Zeppelin miniboss gedrag
+### 2.2.2 Zeppelin miniboss gedrag
 
 - De Zeppelin komt eerst de stad in tijdens een korte `approach`-fase; daarna start pas de echte fight-fase.
 - Tijdens deze encounter blijft de speler in `flight_mode`; er is dus geen ground reset of gewone boss hub tussen intro en gevecht.
 - De Zeppelin gebruikt een sprite-based render zodra `assets/zeppelin.png` beschikbaar is; alleen zonder asset blijft de oudere procedurale fallback actief.
 - Tijdens het gevecht kan het vliegtuig `3` treffers van zeppelin-projectiles opvangen voordat het neerstort.
+- Zodra de Zeppelin verslagen is, blijft `flight_mode` actief en loopt de speler direct door naar level 6 in plaats van eerst terug naar een ground-scene te vallen.
 - Na de eerste treffer rookt het vliegtuig periodiek ongeveer elke `4` seconden.
 - Na de tweede treffer rookt het vliegtuig periodiek ongeveer elke `2` seconden.
 - De derde treffer door een zeppelin-projectile veroorzaakt een crash.
 - Een botsing met een pipe blijft direct fataal; pipe-collisions gebruiken dus geen hitpoint-systeem.
 - De post-boss overgang mag de luchtarena pas loslaten nadat de defeat/explosion sequence visueel klaar is.
-- Daarna moet de speler logisch de gewone wereld in vallen vanuit de actuele hoogte van het gevecht, niet via een kunstmatige teleport naar een vaste y-positie.
+- Pas daarna schakelt de game terug van city-bossarena naar de cave-flight presentatie van level 6.
 
 Waarom:
 
@@ -117,7 +116,7 @@ Waarom:
 - Een 3-hit vliegtuigstate maakt de fight minder binair en leesbaarder zonder pipes of arena-positioning ongevaarlijk te maken.
 - Rookfeedback maakt schade zichtbaar in de wereld zelf, in lijn met het principe dat gameplay-impact niet alleen in tekst mag zitten.
 
-### Eindbaas level 10
+### 2.2.3 Eindbaas level 10
 
 - Voor de coyote-boss staat rechts een pijp.
 - `Pijl omlaag` op de pijp start de ondergrondse boss arena.
@@ -125,9 +124,9 @@ Waarom:
 - Grote vallende bommen tonen een gele landingsgloed zolang ze nog in de lucht zijn.
 - Zodra een grote bom ontploft, licht de cave kort op.
 
-### Documentatiegraad bosses
+### 2.2.4 Documentatiegraad bosses
 
-- De globale boss-entrances en de specifieke level-6 en level-10 regels zijn nu beschreven in deze SGB.
+- De globale boss-entrances en de specifieke level-5/6 en level-10 regels zijn nu beschreven in deze SGB.
 - Het volledige encountergedrag van de bird boss, cactus boss en final boss is nog niet overal systematisch uitgeschreven.
 - Verdere iteraties op boss-balans, arena-flow en visuele feedback horen die encounterregels later ook expliciet per boss aan te vullen.
 
@@ -146,7 +145,7 @@ Waarom:
   - miniboss `2`: `15` punten;
   - eindbaas: `35` punten.
 
-### Obstakelgeneratiebeleid
+### 2.3.1 Obstakelgeneratiebeleid
 
 - Levels `1` t/m `7` zijn primair leerbaar en gebruiken vaste obstaclepatronen.
 - Vanaf level `8` is beperkte variatie toegestaan, maar alleen met curated templates (geen vrije RNG-combinatie van losse obstakels).
@@ -154,7 +153,7 @@ Waarom:
 - Validatieregel: ook als een high-jump powerup leeg is, moet de speler met normale sprong een uitwijkroute of haalbare timing houden.
 - Templates die directe "soft-lock" situaties kunnen veroorzaken (zoals te krappe multi-cactusketens zonder herstelmoment) zijn niet toegestaan.
 
-### Aantal obstacles per level
+### 2.3.2 Aantal obstacles per level
 
 - Level `1`: `6` obstacles.
 - Level `2`: `9` obstacles (`15` totaal).
@@ -169,61 +168,68 @@ Waarom:
 
 ### 2.4 Levels
 
-### Level 1: `Enter Cactus Land...`
+### 2.4.1 Level 1: `Enter Cactus Land...`
 
 - Introductie van de woestijn.
 - Basisobstakels: lage cactus, hoge cactus en lage vogel.
 - Nog geen slang.
 
-### Level 2: `Snake Sands`
+### 2.4.2 Level 2: `Snake Sands`
 
 - Meer druk in de woestijn.
 - Slangen komen erbij.
 - Timing tussen vogel, cactus en slang varieert meer.
 
-### Level 3: `High Jump Ridge`
+### 2.4.3 Level 3: `High Jump Ridge`
 
 - Verticale sprongen worden belangrijker.
 - Torencactus en high-jumpflow krijgen nadruk.
 - Jump blocks kunnen regen, natte grond en bloemen triggeren.
 
-### Level 4: `Bird Boss Canyon`
+### 2.4.4 Level 4: `Bird Boss Canyon`
 
 - Eerste minibossfase.
 - Reuzenvogel-boss.
 - Shop-hub vóór de arena-ingang.
 
-### Level 5: `Fly away`
+### 2.4.5 Level 5: `Fly away`
 
 - Eerste vliegtuighoofdstuk.
 - Pijpen verschijnen als obstakels.
 - Vliegtuig kan als pickup flight mode starten.
+- Tijdens de flight-sectie vliegen er ook vogels tussen de pijpen door.
+- Die vogels kiezen bewust een route net boven de onderpijp of net onder de bovenpijp, zodat ze zelf niet tegen de pijpen botsen.
+- Tegen het einde van level 5 verschijnt een dubbele vogelpassage met tegelijk een bovenste en onderste vogel, zodat alleen de middellijn veilig blijft.
+- Aan het einde van dit level verschijnt de Zeppelin-tussenbaas als luchtgevecht boven de stad.
+- De speler blijft in het gele vliegtuig en schiet de Zeppelin neer voordat level 6 begint.
 
-### Level 6: `Storm Track`
+### 2.4.6 Level 6: `Blue Caverns`
 
 - Tweede vliegtuighoofdstuk.
-- Flight mode loopt door over level 5 en 6.
-- Pijpen blijven actief als obstakeltype.
-- Aan het eind van deze luchtsectie verschijnt de Zeppelin-tussenbaas.
-- De speler blijft in het gele vliegtuig en schiet de Zeppelin neer vanuit de lucht.
+- Flight mode loopt direct door vanuit de zeppelin-fight aan het einde van level 5.
+- De groene pijpen maken plaats voor blauwe cave hazards die als stalactieten en stalagmieten uit plafond en vloer groeien.
+- Deze hazards bewegen langzaam op en neer door het gat tussen boven- en onderzijde te verschuiven.
+- Een deel van de hazards begint kort te trillen voordat een stuk steen losbreekt en naar beneden valt.
+- Dit level gebruikt geen aparte miniboss-intro meer; het is juist de doorlopende cave-flight nasleep van de zeppelin-boundary fight.
 
-### Level 7: `Cactus Fortress`
+### 2.4.7 Level 7: `Cactus Fortress`
 
 - Tweede minibossfase.
 - Grondgevecht tegen de reuzencactus.
 - Shop-hub vóór de arena-ingang.
 
-### Level 8: `Wild Flats`
+### 2.4.8 Level 8: `Wild Flats`
 
 - Meer tempo en krappe obstacle-combinaties.
 - Multi-cactus packs vragen snelle landingen.
 
-### Level 9: `Last Stretch`
+### 2.4.9 Level 9: `Bird Storm`
 
 - Voorbereiding op de eindbaas.
 - Hogere reactiedruk en minder hersteltijd.
+- Vogelzwermen doorbreken hier de oude enkelvoudige obstakelcadans.
 
-### Level 10: `Giant Town`
+### 2.4.10 Level 10: `Giant Town`
 
 - Eindbaasfase.
 - Reuzenvariant per karakter:
@@ -320,7 +326,7 @@ Waarom:
 - Obstakels en arena-elementen blijven in principe zichtbaar tijdens een defeat-state als zij direct onderdeel waren van de aanleiding van die defeat.
 - Stylization is toegestaan, maar alleen zolang oorzaak en gevolg voor de speler visueel navolgbaar blijven.
 
-### Character Asset Contract
+### 5.2.1 Character Asset Contract
 
 Voor character poses is een runtime sprite sheet niet verplicht, maar de assetset moet zich wel gedragen alsof de frames uit één sprite sheet komen.
 
@@ -416,7 +422,7 @@ Waarom:
 - De browser voert de app niet rechtstreeks uit de repository uit, maar uit een opgebouwde en verpakte webbundle.
 - Voor debugging van webdeploys moet duidelijk zijn welk deel runtime is, welk deel appcode is, en welk deel uit lokale mirror of externe CDN komt.
 
-#### Wat is de webbundle precies?
+#### 6.1.1 Wat is de webbundle precies?
 
 - Tijdens de build wordt eerst een tijdelijke stage-map opgebouwd in `.web-build/stage/`.
 - Daarin worden de app-entrypoint (`main.py`), `processing/`, `assets/` en enkele begeleidende bestanden gekopieerd.
@@ -426,7 +432,7 @@ Waarom:
 - De Python-code van de game zit dus inderdaad in die gedeployde bundle, samen met assets en frameworkbestanden.
 - De CPython WebAssembly-runtime zelf zit daar niet in; die komt uit de pygbag-runtimebestanden zoals `pythons.js`, `main.js` en `main.wasm`.
 
-#### Wat betekent `bundle = "stage"` dan?
+#### 6.1.2 Wat betekent `bundle = "stage"` dan?
 
 - In `scripts/web/default.tmpl` staat een Python-variabele `bundle = "stage"`.
 - Dat is geen environmentvariabele en ook geen verwijzing naar productie.
@@ -434,21 +440,21 @@ Waarom:
 - De mountnaam `stage` en de bestandsnaam van de gedeployde bundle zijn dus twee verschillende dingen.
 - De live gedeployde productiebundle kan bijvoorbeeld `dino_game-v0.2.0-<build_id>.tar.gz` heten, terwijl die na uitpakken nog steeds onder `/data/data/stage` beschikbaar komt.
 
-#### Waarom bestaat die tarball überhaupt?
+#### 6.1.3 Waarom bestaat die tarball überhaupt?
 
 - De browser kan niet direct een hele Python-projectmap als lokale directory mounten.
 - Een gecomprimeerde bundle maakt het mogelijk om de volledige app als één payload te downloaden en daarna in de virtuele wasm-filesystem uit te pakken.
 - Daardoor kan `assets/main.py` in de browser draaien alsof het een gewone projectmap is.
 - Het verschil tussen lokale preview en productie zit daardoor vaak niet in "de repo", maar in welke gegenereerde webbundle daadwerkelijk wordt geserveerd.
 
-#### Lokaal previewen versus productie
+#### 6.1.4 Lokaal previewen versus productie
 
 - `http://127.0.0.1:9000/` serveert de lokale gegenereerde webbundle uit `.web-build/output/`.
 - `https://bartvanderwal.github.io/dino_game/` serveert de live gedeployde productiebundle vanaf GitHub Pages.
 - De lokale preview gebruikt dus niet de live gedeployde productiebundle van GitHub Pages.
 - Gelijke URL-structuur en gelijke template betekenen dus nog niet dat lokaal en productie dezelfde gegenereerde webbundle laden.
 
-#### Rol van CDN versus lokale mirror
+#### 6.1.5 Rol van CDN versus lokale mirror
 
 - De appcode en game-assets horen uit de eigen build-output te komen, dus uit de buildspecifieke bundle en lokale bestanden onder `.web-build/output/`.
 - De pygbag-runtimebestanden kunnen uit een externe CDN of uit een lokale mirror `cdn/0.9.3/` komen.
@@ -456,7 +462,7 @@ Waarom:
 - "CDN" is hier dus niet bedoeld als uitzondering, maar als lokaal meegesynchroniseerde runtime-map binnen de eigen deploy-output.
 - Een verschil tussen lokaal en productie wijst in dit model meestal op een verschil in de daadwerkelijk geserveerde bundle of runtimebestanden, niet per se op een verschil in repository-broncode.
 
-#### C4 Context
+#### 6.1.6 C4 Context
 
 ```mermaid
 C4Context
@@ -473,7 +479,7 @@ Rel_D(webapp, hosting, "Laadt webbuild vanaf", "HTTPS")
 Rel_D(webapp, cdn, "Gebruikt runtimebestanden van indien lokale mirror uit staat", "HTTPS, optioneel")
 ```
 
-#### C4 Container
+#### 6.1.7 C4 Container
 
 ```mermaid
 C4Container
@@ -504,7 +510,7 @@ Rel(vfs, pyapp, "Levert projectbestanden aan", "Bestandstoegang")
 Rel(pyapp, canvas, "Tekent spelwereld en UI op", "pygame-ce / SDL")
 ```
 
-#### C4 Component
+#### 6.1.8 C4 Component
 
 ```mermaid
 C4Component
@@ -535,7 +541,7 @@ Rel(mainpy, assets, "Laadt sprites, audio en data", "Bestandstoegang")
 Rel(mainpy, canvas, "Rendert frames en UI", "pygame-ce / SDL")
 ```
 
-#### Debug-implicaties
+#### 6.1.9 Debug-implicaties
 
 - Een verschil tussen lokaal en productie kan ontstaan als `index.html` of de buildspecifieke bundle op productie nog van een oudere build komt.
 - Runtime-fouten over missende assets of onverwachte paden betekenen in dat geval meestal dat de geladen webbundle niet overeenkomt met de verwachte build-inhoud.
@@ -585,7 +591,7 @@ Voor audio-assets in web builds (pygbag) geldt:
 - .ogg werkt niet in Safari/iOS en is dus niet universeel web-compatibel.
 - Zie ook: [MDN Web Docs: Audio codecs](https://developer.mozilla.org/en-US/docs/Web/HTML/Supported_media_formats#browser_compatibility)
 
-### Waarom
+### 11.1.1 Waarom
 
 - Fallbacks op .ogg/.mp3/.wav maken foutmeldingen onduidelijk en maskeren assetproblemen.
 - Alleen het juiste, verwachte bestand wordt geladen; ontbreekt dat, dan volgt een duidelijke foutmelding.
