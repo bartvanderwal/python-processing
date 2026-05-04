@@ -1645,7 +1645,7 @@ def setup():
     global TOUCH_CONTROLS_ENABLED
     size(BASE_GAME_WIDTH, BASE_GAME_HEIGHT)
     frame_rate(60)
-    title(f"Dino Game v{APP_VERSION}")
+    title(f"dino_game v{APP_VERSION}")
     TOUCH_CONTROLS_ENABLED = detect_touch_controls_enabled()
     reset_game(show_splash=True)
 

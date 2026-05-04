@@ -20,9 +20,38 @@ import platform
 import json
 from pathlib import Path
 
+
+def get_browser_language_code():
+    try:
+        language = str(platform.window.navigator.language or "")
+    except Exception as exc:
+        print(f"default.tmpl: failed to read browser language: {exc.__class__.__name__}: {exc}")
+        return "en"
+
+    language = language.strip().lower()
+    if not language:
+        return "en"
+
+    return language.split("-", 1)[0]
+
+
+def get_loading_texts():
+    language = get_browser_language_code()
+    if language == "nl":
+        return {
+            "ready": "Klaar om te starten. Klik of tik op de pagina.",
+            "installing": "Installeert {pkg}",
+        }
+
+    return {
+        "ready": "Ready to start! Please click/touch the page.",
+        "installing": "Installing {pkg}",
+    }
+
 # do not rename
 async def custom_site():
     import embed
+    texts = get_loading_texts()
     platform.document.body.style.background = "#7f7f7f"
 
     platform.window.transfer.hidden = true
@@ -70,7 +99,7 @@ async def custom_site():
         __import__(__name__).__file__ = main
 
         # now make a prompt
-        msg  = "Ready to start ! Please click/touch page"
+        msg = texts["ready"]
         platform.window.infobox.innerText = msg
         print("\n"*4, f"    * Waiting for media user engagement. {msg} *" , "\n"*4)
 
@@ -86,7 +115,7 @@ async def custom_site():
 
 
     def ui_callback(pkg):
-        platform.window.infobox.innerText = f"installing {pkg}"
+        platform.window.infobox.innerText = texts["installing"].format(pkg=pkg)
 
     # Pre-register pygame cython submodules before aio import scanning.
     # This avoids fallback network imports like `pygame.image` on wasm.
@@ -190,6 +219,42 @@ config = {
     fb_ar   :  1.6,
     fb_width : "800",
     fb_height : "500"
+}
+
+const LOADING_TEXTS = {
+    en: {
+        htmlLang: "en-US",
+        status: "Downloading...",
+        infobox: "Loading, please wait ..."
+    },
+    nl: {
+        htmlLang: "nl-NL",
+        status: "Downloaden...",
+        infobox: "Laden, even geduld ..."
+    }
+}
+
+function getLoadingTexts() {
+    const language = (navigator.language || "en").toLowerCase();
+    if (language.startsWith("nl")) {
+        return LOADING_TEXTS.nl;
+    }
+    return LOADING_TEXTS.en;
+}
+
+function applyLoadingTexts() {
+    const texts = getLoadingTexts();
+    document.documentElement.lang = texts.htmlLang;
+
+    const status = document.getElementById("status");
+    if (status) {
+        status.innerText = texts.status;
+    }
+
+    const infobox = document.getElementById("infobox");
+    if (infobox) {
+        infobox.innerText = texts.infobox;
+    }
 }
 
 function show_infobox() {
@@ -416,6 +481,8 @@ frameborder="1"
         // this is called before anything python is loaded
         // make your js customization here
         console.log(__FILE__, "custom_onload")
+
+        applyLoadingTexts()
 
         pyconsole.hidden = debug_hidden
         system.hidden = debug_hidden

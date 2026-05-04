@@ -61,6 +61,125 @@ Waarom:
 - Eerst het owning codepad in de app zelf onderzoeken.
 - Als een frameworkaanpassing toch nodig lijkt, eerst expliciet afstemmen en idealiter apart behandelen als library-bug of library-change.
 
+## Web Runtime en Packaging
+
+De webbuild bestaat niet uit "los wat Python-bestanden in de browser draaien", maar uit een kleine bootstraplaag plus een gecomprimeerde app-bundle.
+
+Waarom:
+
+- Zonder dit mentale model is het lastig te begrijpen waarom lokaal en productie kunnen verschillen terwijl de broncode zelf gelijk lijkt.
+- De browser voert de app niet rechtstreeks uit de repository uit, maar uit een opgebouwde en verpakte webbundle.
+- Voor debugging van webdeploys moet duidelijk zijn welk deel runtime is, welk deel appcode is, en welk deel uit lokale mirror of externe CDN komt.
+
+### Wat is `stage.tar.gz`?
+
+- Tijdens de build wordt eerst een tijdelijke stage-map opgebouwd in `.web-build/stage/`.
+- Daarin worden de app-entrypoint (`main.py`), `processing/`, `assets/` en enkele begeleidende bestanden gekopieerd.
+- Pygbag verpakt die stage-map vervolgens als web-app-output, waaronder `index.html` en `stage.tar.gz`.
+- In een normale browserdeploy wordt vooral `stage.tar.gz` gebruikt als app-bundle; die wordt door de bootstrapcode opgehaald en uitgepakt in de virtuele filesystem van de wasm-runtime.
+- De Python-code van de game zit dus inderdaad in `stage.tar.gz`, samen met assets en frameworkbestanden.
+- De CPython WebAssembly-runtime zelf zit daar niet in; die komt uit de pygbag-runtimebestanden zoals `pythons.js`, `main.js` en `main.wasm`.
+
+### Waarom bestaat die tarball überhaupt?
+
+- De browser kan niet direct een hele Python-projectmap als lokale directory mounten.
+- Een gecomprimeerde bundle maakt het mogelijk om de volledige app als één payload te downloaden en daarna in de virtuele wasm-filesystem uit te pakken.
+- Daardoor kan `assets/main.py` in de browser draaien alsof het een gewone projectmap is.
+- Het verschil tussen lokale preview en productie zit daardoor vaak niet in "de repo", maar in welke `stage.tar.gz` daadwerkelijk wordt geserveerd.
+
+### Rol van CDN versus lokale mirror
+
+- De appcode en game-assets horen uit de eigen build-output te komen, dus uit `stage.tar.gz` en lokale bestanden onder `.web-build/output/`.
+- De pygbag-runtimebestanden kunnen uit een externe CDN of uit een lokale mirror `cdn/0.9.3/` komen.
+- In dit project staat `LOCAL_CDN` standaard op `1` in de buildscriptconfiguratie en de GitHub Pages workflow zet `LOCAL_CDN=1` ook expliciet aan.
+- "CDN" is hier dus niet bedoeld als uitzondering, maar als lokaal meegesynchroniseerde runtime-map binnen de eigen deploy-output.
+- Een verschil tussen lokaal en productie wijst in dit model meestal op een verschil in de daadwerkelijk geserveerde bundle of runtimebestanden, niet per se op een verschil in repository-broncode.
+
+### C4 Context
+
+```mermaid
+C4Context
+title Dino Game - System Context
+UpdateLayoutConfig($c4ShapeInRow="1", $c4BoundaryInRow="1")
+
+Person(player, "Speler", "Speelt de game in een desktop- of mobiele browser.")
+System(webapp, "Dino Game Web App", "Canvas-game die lokaal of via GitHub Pages draait.")
+System_Ext(hosting, "GitHub Pages / lokale webserver", "Serveert index.html, stage.tar.gz en de lokale runtime-mirror.")
+System_Ext(cdn, "Optionele externe pygbag CDN", "Alternatieve bron voor runtimebestanden als de lokale mirror niet wordt gebruikt.")
+
+Rel_D(player, webapp, "Speelt", "Browser + invoer")
+Rel_D(webapp, hosting, "Laadt webbuild vanaf", "HTTPS")
+Rel_D(webapp, cdn, "Gebruikt runtimebestanden van indien lokale mirror uit staat", "HTTPS, optioneel")
+```
+
+### C4 Container
+
+```mermaid
+C4Container
+title Dino Game - Container Diagram
+
+Person(player, "Speler", "Gebruikt de game in een browser.")
+System_Ext(hosting, "GitHub Pages / lokale webserver", "Publiceert de webbuild en lokale runtime-mirror.")
+System_Ext(cdn, "Optionele externe pygbag CDN", "Fallback voor runtimebestanden.")
+
+System_Boundary(webapp, "Dino Game Web App") {
+  Container(shell, "HTML shell", "index.html", "Laadt de runtime, toont titel/versie en bevat het canvas.")
+  Container(runtime, "Pygbag runtime", "pythons.js, main.js, main.wasm", "Initialiseert CPython in WebAssembly en start de app.")
+  Container(vfs, "Virtuele filesystem", "/data/data/stage", "Bevat de uitgepakte app-bundle tijdens runtime.")
+  Container(pyapp, "Python game app", "assets/main.py + processing/ + assets/", "Voert game-logica, rendering en audio aansturing uit.")
+  Container(canvas, "Canvas renderer", "HTML5 canvas", "Toont de gameframes en touch-controls.")
+}
+
+Container_Ext(bundle, "App-bundle", "stage.tar.gz", "Gecomprimeerde payload met Python-code, framework en assets.")
+Container_Ext(localcdn, "Lokale runtime-mirror", "cdn/0.9.3/", "Meegeleverde runtimebestanden binnen de eigen deploy-output.")
+
+Rel(player, shell, "Opent en gebruikt", "Browser")
+Rel(shell, runtime, "Laadt", "Script tags")
+Rel(runtime, bundle, "Downloadt en pakt uit", "HTTP + tar.gz")
+Rel(runtime, localcdn, "Laadt runtimebestanden vanaf", "HTTP")
+Rel(runtime, cdn, "Gebruikt als fallback", "HTTP, optioneel")
+Rel(bundle, vfs, "Wordt uitgepakt naar", "Virtuele filesystem")
+Rel(vfs, pyapp, "Levert projectbestanden aan", "Bestandstoegang")
+Rel(pyapp, canvas, "Tekent spelwereld en UI op", "pygame-ce / SDL")
+```
+
+### C4 Component
+
+```mermaid
+C4Component
+title Dino Game - Component Diagram of the Web Runtime
+
+Person(player, "Speler", "Start de game en gebruikt keyboard, touch of muis.")
+Container_Ext(hosting, "Hosting-output", "index.html, stage.tar.gz, cdn/0.9.3/", "De gebouwde webartifacten.")
+
+Container_Boundary(webapp, "Dino Game Web App") {
+  Component(shell, "HTML shell", "index.html", "Start de webapp en toont paginatitel, versie en canvas-host.")
+  Component(bootstrap, "Bootstrap script", "pygbag template script", "Initialiseert de runtime en opent stage.tar.gz.")
+  Component(runtime, "Runtime loader", "pythons.js + main.js", "Laadt CPython wasm en browser-API-koppelingen.")
+  Component(vfs, "Virtuele filesystem", "BrowserFS / in-memory FS", "Exposeert de uitgepakte bundle als projectmap.")
+  Component(mainpy, "Game entrypoint", "assets/main.py", "Start setup, game loop, audio en scene-overgangen.")
+  Component(framework, "Processing framework", "processing/", "Levert teken-, input- en runtime-abstrahering.")
+  Component(assets, "Game assets", "assets/", "Bevat sprites, audio en overige contentbestanden.")
+  Component(canvas, "Canvas host", "HTML5 canvas", "Ontvangt de uiteindelijke rendering van de game.")
+}
+
+Rel(player, shell, "Opent en bedient", "Browser")
+Rel(shell, bootstrap, "Voert uit", "Inline script")
+Rel(bootstrap, hosting, "Leest bundle en runtimebestanden vanaf", "HTTP")
+Rel(bootstrap, runtime, "Start", "JavaScript")
+Rel(runtime, vfs, "Mount en gebruikt", "BrowserFS API")
+Rel(vfs, mainpy, "Maakt entrypoint beschikbaar", "Bestandstoegang")
+Rel(mainpy, framework, "Gebruikt Processing-API voor runtime en drawing", "Python import")
+Rel(mainpy, assets, "Laadt sprites, audio en data", "Bestandstoegang")
+Rel(mainpy, canvas, "Rendert frames en UI", "pygame-ce / SDL")
+```
+
+### Debug-implicaties
+
+- Een verschil tussen lokaal en productie kan ontstaan als `index.html` of `stage.tar.gz` op productie nog van een oudere build komt.
+- Runtime-fouten over missende assets of onverwachte paden betekenen in dat geval meestal dat de geladen webbundle niet overeenkomt met de verwachte build-inhoud.
+- Het is daarom niet genoeg om alleen de repo-bron te inspecteren; voor webbugs moet ook de daadwerkelijk geserveerde `stage.tar.gz` gecontroleerd kunnen worden.
+
 ## Creative Integrity
 
 De game gebruikt dezelfde visuele taal op meerdere plekken.
@@ -384,4 +503,4 @@ Voor audio-assets in web builds (pygbag) geldt:
 
 - Fallbacks op .ogg/.mp3/.wav maken foutmeldingen onduidelijk en maskeren assetproblemen.
 - Alleen het juiste, verwachte bestand wordt geladen; ontbreekt dat, dan volgt een duidelijke foutmelding.
-- Dit voorkomt verwarring over missende .ogg-bestanden en zorgt voor dev/prod parity.
+- Dit voorkomt verwarring over ontbrekende of niet-universeel ondersteunde audioformaten en zorgt voor dev/prod parity.
