@@ -71,25 +71,41 @@ Waarom:
 - De browser voert de app niet rechtstreeks uit de repository uit, maar uit een opgebouwde en verpakte webbundle.
 - Voor debugging van webdeploys moet duidelijk zijn welk deel runtime is, welk deel appcode is, en welk deel uit lokale mirror of externe CDN komt.
 
-### Wat is `stage.tar.gz`?
+### Wat is de webbundle precies?
 
 - Tijdens de build wordt eerst een tijdelijke stage-map opgebouwd in `.web-build/stage/`.
 - Daarin worden de app-entrypoint (`main.py`), `processing/`, `assets/` en enkele begeleidende bestanden gekopieerd.
-- Pygbag verpakt die stage-map vervolgens als web-app-output, waaronder `index.html` en `stage.tar.gz`.
-- In een normale browserdeploy wordt vooral `stage.tar.gz` gebruikt als app-bundle; die wordt door de bootstrapcode opgehaald en uitgepakt in de virtuele filesystem van de wasm-runtime.
-- De Python-code van de game zit dus inderdaad in `stage.tar.gz`, samen met assets en frameworkbestanden.
+- Pygbag produceert vervolgens weboutput met `index.html` plus een gecomprimeerde app-bundle.
+- In dit project wordt die gedeployde bundle na de build hernoemd naar een buildspecifieke bestandsnaam zoals `dino_game-v0.2.0-<build_id>.tar.gz`.
+- De bootstrapcode in `index.html` haalt precies die buildspecifieke bundle op en pakt die uit in de virtuele filesystem van de wasm-runtime.
+- De Python-code van de game zit dus inderdaad in die gedeployde bundle, samen met assets en frameworkbestanden.
 - De CPython WebAssembly-runtime zelf zit daar niet in; die komt uit de pygbag-runtimebestanden zoals `pythons.js`, `main.js` en `main.wasm`.
+
+### Wat betekent `bundle = "stage"` dan?
+
+- In `scripts/web/default.tmpl` staat een Python-variabele `bundle = "stage"`.
+- Dat is geen environmentvariabele en ook geen verwijzing naar productie.
+- Die naam wordt alleen intern gebruikt als runtime-mountnaam voor het virtuele pad `/data/data/stage`.
+- De mountnaam `stage` en de bestandsnaam van de gedeployde bundle zijn dus twee verschillende dingen.
+- De live gedeployde productiebundle kan bijvoorbeeld `dino_game-v0.2.0-<build_id>.tar.gz` heten, terwijl die na uitpakken nog steeds onder `/data/data/stage` beschikbaar komt.
 
 ### Waarom bestaat die tarball überhaupt?
 
 - De browser kan niet direct een hele Python-projectmap als lokale directory mounten.
 - Een gecomprimeerde bundle maakt het mogelijk om de volledige app als één payload te downloaden en daarna in de virtuele wasm-filesystem uit te pakken.
 - Daardoor kan `assets/main.py` in de browser draaien alsof het een gewone projectmap is.
-- Het verschil tussen lokale preview en productie zit daardoor vaak niet in "de repo", maar in welke `stage.tar.gz` daadwerkelijk wordt geserveerd.
+- Het verschil tussen lokale preview en productie zit daardoor vaak niet in "de repo", maar in welke gegenereerde webbundle daadwerkelijk wordt geserveerd.
+
+### Lokaal previewen versus productie
+
+- `http://127.0.0.1:9000/` serveert de lokale gegenereerde webbundle uit `.web-build/output/`.
+- `https://bartvanderwal.github.io/dino_game/` serveert de live gedeployde productiebundle vanaf GitHub Pages.
+- De lokale preview gebruikt dus niet de live gedeployde productiebundle van GitHub Pages.
+- Gelijke URL-structuur en gelijke template betekenen dus nog niet dat lokaal en productie dezelfde gegenereerde webbundle laden.
 
 ### Rol van CDN versus lokale mirror
 
-- De appcode en game-assets horen uit de eigen build-output te komen, dus uit `stage.tar.gz` en lokale bestanden onder `.web-build/output/`.
+- De appcode en game-assets horen uit de eigen build-output te komen, dus uit de buildspecifieke bundle en lokale bestanden onder `.web-build/output/`.
 - De pygbag-runtimebestanden kunnen uit een externe CDN of uit een lokale mirror `cdn/0.9.3/` komen.
 - In dit project staat `LOCAL_CDN` standaard op `1` in de buildscriptconfiguratie en de GitHub Pages workflow zet `LOCAL_CDN=1` ook expliciet aan.
 - "CDN" is hier dus niet bedoeld als uitzondering, maar als lokaal meegesynchroniseerde runtime-map binnen de eigen deploy-output.
@@ -104,7 +120,7 @@ UpdateLayoutConfig($c4ShapeInRow="1", $c4BoundaryInRow="1")
 
 Person(player, "Speler", "Speelt de game in een desktop- of mobiele browser.")
 System(webapp, "Dino Game Web App", "Canvas-game die lokaal of via GitHub Pages draait.")
-System_Ext(hosting, "GitHub Pages / lokale webserver", "Serveert index.html, stage.tar.gz en de lokale runtime-mirror.")
+System_Ext(hosting, "GitHub Pages / lokale webserver", "Serveert index.html, een buildspecifieke bundle en de lokale runtime-mirror.")
 System_Ext(cdn, "Optionele externe pygbag CDN", "Alternatieve bron voor runtimebestanden als de lokale mirror niet wordt gebruikt.")
 
 Rel_D(player, webapp, "Speelt", "Browser + invoer")
@@ -130,7 +146,7 @@ System_Boundary(webapp, "Dino Game Web App") {
   Container(canvas, "Canvas renderer", "HTML5 canvas", "Toont de gameframes en touch-controls.")
 }
 
-Container_Ext(bundle, "App-bundle", "stage.tar.gz", "Gecomprimeerde payload met Python-code, framework en assets.")
+Container_Ext(bundle, "App-bundle", "dino_game-v<version>-<build_id>.tar.gz", "Gecomprimeerde payload met Python-code, framework en assets.")
 Container_Ext(localcdn, "Lokale runtime-mirror", "cdn/0.9.3/", "Meegeleverde runtimebestanden binnen de eigen deploy-output.")
 
 Rel(player, shell, "Opent en gebruikt", "Browser")
@@ -150,11 +166,11 @@ C4Component
 title Dino Game - Component Diagram of the Web Runtime
 
 Person(player, "Speler", "Start de game en gebruikt keyboard, touch of muis.")
-Container_Ext(hosting, "Hosting-output", "index.html, stage.tar.gz, cdn/0.9.3/", "De gebouwde webartifacten.")
+Container_Ext(hosting, "Hosting-output", "index.html, buildspecifieke bundle, cdn/0.9.3/, version.json", "De gebouwde webartifacten.")
 
 Container_Boundary(webapp, "Dino Game Web App") {
   Component(shell, "HTML shell", "index.html", "Start de webapp en toont paginatitel, versie en canvas-host.")
-  Component(bootstrap, "Bootstrap script", "pygbag template script", "Initialiseert de runtime en opent stage.tar.gz.")
+  Component(bootstrap, "Bootstrap script", "pygbag template script", "Initialiseert de runtime en opent de buildspecifieke bundle.")
   Component(runtime, "Runtime loader", "pythons.js + main.js", "Laadt CPython wasm en browser-API-koppelingen.")
   Component(vfs, "Virtuele filesystem", "BrowserFS / in-memory FS", "Exposeert de uitgepakte bundle als projectmap.")
   Component(mainpy, "Game entrypoint", "assets/main.py", "Start setup, game loop, audio en scene-overgangen.")
@@ -176,9 +192,9 @@ Rel(mainpy, canvas, "Rendert frames en UI", "pygame-ce / SDL")
 
 ### Debug-implicaties
 
-- Een verschil tussen lokaal en productie kan ontstaan als `index.html` of `stage.tar.gz` op productie nog van een oudere build komt.
+- Een verschil tussen lokaal en productie kan ontstaan als `index.html` of de buildspecifieke bundle op productie nog van een oudere build komt.
 - Runtime-fouten over missende assets of onverwachte paden betekenen in dat geval meestal dat de geladen webbundle niet overeenkomt met de verwachte build-inhoud.
-- Het is daarom niet genoeg om alleen de repo-bron te inspecteren; voor webbugs moet ook de daadwerkelijk geserveerde `stage.tar.gz` gecontroleerd kunnen worden.
+- Het is daarom niet genoeg om alleen de repo-bron te inspecteren; voor webbugs moet ook de daadwerkelijk geserveerde live gedeployde productiebundle gecontroleerd kunnen worden.
 
 ## Creative Integrity
 
@@ -493,7 +509,7 @@ Waarom:
 Voor audio-assets in web builds (pygbag) geldt:
 
 > ".wav and .mp3 are safe, .ogg is not always supported on all browsers"
-> (pygbag README, 2024, https://github.com/pygame-web/pygbag#assets)
+> (pygbag README, 2024, [pygbag assets docs](https://github.com/pygame-web/pygbag#assets))
 
 - .wav en .mp3 werken in alle moderne browsers, inclusief Safari/iOS.
 - .ogg werkt niet in Safari/iOS en is dus niet universeel web-compatibel.

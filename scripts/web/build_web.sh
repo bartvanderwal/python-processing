@@ -122,6 +122,8 @@ echo "[web-build] Collecting build output..."
 import shutil
 import re
 import json
+import tarfile
+import tempfile
 from pathlib import Path
 
 stage = Path(r"$STAGE_DIR")
@@ -155,6 +157,18 @@ if stage_archive.exists():
     if renamed_archive.exists():
         renamed_archive.unlink()
     stage_archive.rename(renamed_archive)
+
+    # Guarantee the deployed bundle contains the current staged source tree.
+    with tempfile.TemporaryDirectory(prefix="dino_bundle_") as temp_dir:
+        temp_root = Path(temp_dir)
+        with tarfile.open(renamed_archive, mode="r:gz") as archive:
+            archive.extractall(path=temp_root, filter="tar")
+
+        shutil.copytree(stage, temp_root / "assets", dirs_exist_ok=True)
+
+        with tarfile.open(renamed_archive, mode="w:gz") as archive:
+            for child in sorted(temp_root.iterdir()):
+                archive.add(child, arcname=child.name)
 
 version_file = output / "version.json"
 version_file.write_text(
