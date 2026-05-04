@@ -129,6 +129,7 @@ output = Path(r"$OUTPUT_DIR")
 build_id = r"$BUILD_ID"
 app_version = r"$APP_VERSION"
 app_title = f"dino_game v{app_version}"
+bundle_filename = f"dino_game-v{app_version}-{build_id}.tar.gz"
 candidates = [
     stage / "build" / "web",
     stage / "build",
@@ -148,6 +149,13 @@ if output.exists():
 output.parent.mkdir(parents=True, exist_ok=True)
 shutil.copytree(built, output)
 
+stage_archive = output / "stage.tar.gz"
+if stage_archive.exists():
+    renamed_archive = output / bundle_filename
+    if renamed_archive.exists():
+        renamed_archive.unlink()
+    stage_archive.rename(renamed_archive)
+
 version_file = output / "version.json"
 version_file.write_text(
   json.dumps(
@@ -155,6 +163,7 @@ version_file.write_text(
       "build_id": build_id,
       "app_version": app_version,
       "title": app_title,
+      "bundle_filename": bundle_filename,
     },
     indent=2,
   ) + "\n",
@@ -170,7 +179,7 @@ if index_file.exists():
         r"\\1/browserfs.min.js",
         html,
     )
-    html = html.replace('platform.fopen("stage.tar.gz", "rb")', f'platform.fopen("stage.tar.gz?v={build_id}", "rb")')
+    html = html.replace('platform.fopen("stage.tar.gz", "rb")', f'platform.fopen("{bundle_filename}", "rb")')
     html = html.replace("<title>Dino Game</title>", f"<title>{app_title}</title>")
     if "#app_chrome_banner" not in html:
         html = html.replace(
@@ -304,6 +313,7 @@ cdn_prefix = "cdn/0.9.3"
 build_id = r"$BUILD_ID"
 app_version = r"$APP_VERSION"
 app_title = f"dino_game v{app_version}"
+bundle_filename = f"dino_game-v{app_version}-{build_id}.tar.gz"
 if index.exists():
     html = index.read_text(encoding="utf-8")
     html = html.replace('src="https://pygame-web.github.io/cdn/0.9.3/pythons.js"', f'src="{cdn_prefix}/pythons.js?v={build_id}"')
@@ -325,6 +335,7 @@ if index.exists():
           "build_id": build_id,
           "app_version": app_version,
           "title": app_title,
+          "bundle_filename": bundle_filename,
         },
         indent=2,
       ) + "\n",
